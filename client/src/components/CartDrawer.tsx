@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CartItem, OrderType, Order } from '../types';
-import { X, Trash2, Plus, Minus, ShoppingBag, Info, AlertTriangle, ArrowRight } from 'lucide-react';
-import { submitOrder } from '../api';
+import { X, Trash2, Plus, Minus, ShoppingBag, Info, AlertTriangle, ArrowRight, Tag } from 'lucide-react';
+import { submitOrder, validatePromoCode } from '../api';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -36,11 +36,50 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Promo Code State
+  const [promoInput, setPromoInput] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState<{
+    code: string;
+    discountAmount: number;
+    message: string;
+  } | null>(null);
+  const [promoValidating, setPromoValidating] = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
+
   if (!isOpen) return null;
 
-  const subtotal = items.reduce((acc, ci) => acc + ci.item.price * ci.quantity, 0);
+  const rawSubtotal = items.reduce((acc, ci) => acc + ci.item.price * ci.quantity, 0);
+  const discountAmount = appliedPromo ? Math.min(rawSubtotal, appliedPromo.discountAmount) : 0;
+  const subtotal = Math.max(0, rawSubtotal - discountAmount);
   const estimatedTax = Math.round(subtotal * 0.05);
   const total = subtotal + estimatedTax;
+
+  const handleApplyPromo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!promoInput.trim()) return;
+
+    setPromoValidating(true);
+    setPromoError(null);
+    try {
+      const res = await validatePromoCode(cafeSlug, promoInput.trim(), rawSubtotal);
+      setAppliedPromo({
+        code: res.code,
+        discountAmount: res.discountAmount,
+        message: res.message,
+      });
+      setPromoInput('');
+    } catch (err: any) {
+      setPromoError(err.message || 'Invalid promo code');
+      setAppliedPromo(null);
+    } finally {
+      setPromoValidating(false);
+    }
+  };
+
+  const handleRemovePromo = () => {
+    setAppliedPromo(null);
+    setPromoError(null);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,6 +104,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         customerPhone: customerPhone.trim() || undefined,
         tableNumber: orderType === 'dine-in' ? tableNumber.trim() : undefined,
         notes: notes.trim() || undefined,
+        promoCode: appliedPromo ? appliedPromo.code : undefined,
         items: items.map((ci) => ({
           menuItemId: ci.item.id,
           quantity: ci.quantity,
@@ -232,12 +272,71 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               />
             </div>
 
+            {/* Promo Code Input / Applied Badge */}
+            <div style={{ marginBottom: '1rem', background: '#f8fafc', padding: '0.65rem 0.75rem', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+              {appliedPromo ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Tag size={15} color="#059669" />
+                    <div>
+                      <span style={{ fontWeight: 700, color: '#059669', fontSize: '0.85rem' }}>{appliedPromo.code}</span>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b', marginLeft: 6 }}>({appliedPromo.message})</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemovePromo}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center' }}
+                    title="Remove Promo Code"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    <div style={{ position: 'relative', flex: 1 }}>
+                      <Tag size={13} color="#94a3b8" style={{ position: 'absolute', left: 8, top: 10 }} />
+                      <input
+                        type="text"
+                        placeholder="Promo code (e.g. MINT10)"
+                        className="form-input"
+                        style={{ paddingLeft: '1.8rem', height: 32, fontSize: '0.8rem', textTransform: 'uppercase' }}
+                        value={promoInput}
+                        onChange={(e) => setPromoInput(e.target.value)}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ height: 32, padding: '0 0.75rem', fontSize: '0.75rem' }}
+                      disabled={promoValidating || !promoInput.trim()}
+                      onClick={handleApplyPromo}
+                    >
+                      {promoValidating ? 'Checking...' : 'Apply'}
+                    </button>
+                  </div>
+                  {promoError && (
+                    <div style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: 4 }}>
+                      {promoError}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Price Breakdown */}
             <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '0.75rem', marginBottom: '0.75rem', fontSize: '0.85rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', marginBottom: 2 }}>
                 <span>Subtotal</span>
-                <span>{currencySymbol}{(subtotal / 100).toFixed(2)}</span>
+                <span>{currencySymbol}{(rawSubtotal / 100).toFixed(2)}</span>
               </div>
+              {discountAmount > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#059669', fontWeight: 600, marginBottom: 2 }}>
+                  <span>Discount ({appliedPromo?.code})</span>
+                  <span>- {currencySymbol}{(discountAmount / 100).toFixed(2)}</span>
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', marginBottom: 4 }}>
                 <span>Estimated Tax (5%)</span>
                 <span>{currencySymbol}{(estimatedTax / 100).toFixed(2)}</span>

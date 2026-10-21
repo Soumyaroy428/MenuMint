@@ -122,6 +122,12 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
           `
             )
             .join('')}
+          ${order.discount && order.discount > 0 ? `
+            <div class="row" style="color: #059669;">
+              <span>Promo Discount (${order.promoCode || 'PROMO'}):</span>
+              <span>-${currencySymbol}${(order.discount / 100).toFixed(2)}</span>
+            </div>
+          ` : ''}
           <div class="total-row">
             <span>TOTAL PAID:</span>
             <span>${currencySymbol}${(order.total / 100).toFixed(2)}</span>
@@ -299,6 +305,12 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
                   </span>
                 </div>
               ))}
+              {order.discount && order.discount > 0 ? (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '2px 0', color: '#059669', fontWeight: 600 }}>
+                  <span>Promo Discount ({order.promoCode || 'PROMO'})</span>
+                  <span>- {currencySymbol}{(order.discount / 100).toFixed(2)}</span>
+                </div>
+              ) : null}
             </div>
 
             {/* Total and Print Actions */}

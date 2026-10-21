@@ -321,6 +321,96 @@ describe('MenuMint API Test Suite', () => {
     assert.strictEqual(cafe2Res.body.analytics.totalOrders, 1);
     assert.strictEqual(cafe2Res.body.analytics.totalRevenue, 368);
   });
+
+  // 12. CP-33: Promo Code Engine & Tenant Isolation
+  test('POST /api/cafes/:slug/promo/validate should validate promo code and calculate discount', async () => {
+    // 10% on $10.00 (1000 cents) = 100 cents discount
+    const res = await request(app)
+      .post('/api/cafes/daily-grind/promo/validate')
+      .send({ code: 'mint10', subtotal: 1000 });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.valid, true);
+    assert.strictEqual(res.body.code, 'MINT10');
+    assert.strictEqual(res.body.discountAmount, 100);
+
+    // Cafe 2 promo BELLA15 should be rejected on Cafe 1 (Tenant Isolation)
+    const crossCafeRes = await request(app)
+      .post('/api/cafes/daily-grind/promo/validate')
+      .send({ code: 'BELLA15', subtotal: 1000 });
+
+    assert.strictEqual(crossCafeRes.status, 400);
+    assert.strictEqual(crossCafeRes.body.valid, false);
+  });
+
+  test('POST /api/orders should apply promo code discount and recalculate total correctly', async () => {
+    // Note: item-1 was updated to 495 in test 17; item-2 is 525. 495 + 525 = 1020 subtotal
+    // MINT10 = 10% off = 102 discount -> 918 discounted subtotal
+    // 5% tax on 918 = 46 tax -> 964 total
+    const res = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        customerName: 'Discounted Customer',
+        orderType: 'dine-in',
+        promoCode: 'MINT10',
+        items: [
+          { menuItemId: 'item-1', quantity: 1 },
+          { menuItemId: 'item-2', quantity: 1 },
+        ],
+      });
+
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.order.subtotal, 1020);
+    assert.strictEqual(res.body.order.discount, 102);
+    assert.strictEqual(res.body.order.promoCode, 'MINT10');
+    assert.strictEqual(res.body.order.tax, 46);
+    assert.strictEqual(res.body.order.total, 964);
+  });
+
+  test('GET /api/dashboard/promos should return tenant-scoped promo codes', async () => {
+    const res = await request(app)
+      .get('/api/dashboard/promos')
+      .set('Authorization', `Bearer ${ownerToken}`);
+
+    assert.strictEqual(res.status, 200);
+    assert.ok(Array.isArray(res.body.promos));
+    const codes = res.body.promos.map((p: any) => p.code);
+    assert.ok(codes.includes('MINT10'));
+    assert.ok(!codes.includes('BELLA15')); // Cafe 2 promo excluded
+  });
+
+  test('POST, PATCH, and DELETE /api/dashboard/promos should manage promo lifecycle', async () => {
+    // Create new promo
+    const createRes = await request(app)
+      .post('/api/dashboard/promos')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        code: 'SUMMER20',
+        discountType: 'PERCENTAGE',
+        discountValue: 20,
+      });
+
+    assert.strictEqual(createRes.status, 201);
+    assert.strictEqual(createRes.body.promo.code, 'SUMMER20');
+    const newPromoId = createRes.body.promo.id;
+
+    // Toggle status to inactive
+    const patchRes = await request(app)
+      .patch(`/api/dashboard/promos/${newPromoId}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ isActive: false });
+
+    assert.strictEqual(patchRes.status, 200);
+    assert.strictEqual(patchRes.body.promo.isActive, false);
+
+    // Delete promo
+    const deleteRes = await request(app)
+      .delete(`/api/dashboard/promos/${newPromoId}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+
+    assert.strictEqual(deleteRes.status, 200);
+  });
 });
 
 

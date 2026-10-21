@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Order, MenuItem, MenuCategory, OrderStatus, AnalyticsSummary } from '../types';
+import { User, Order, MenuItem, MenuCategory, OrderStatus, AnalyticsSummary, PromoCode } from '../types';
 import {
   loginOwner,
   fetchDashboardOrders,
@@ -10,6 +10,10 @@ import {
   updateMenuItem,
   deleteMenuItem,
   fetchDashboardAnalytics,
+  fetchDashboardPromos,
+  createDashboardPromo,
+  toggleDashboardPromo,
+  deleteDashboardPromo,
 } from '../api';
 import {
   Lock,
@@ -35,6 +39,7 @@ import {
   TrendingUp,
   Award,
   UtensilsCrossed,
+  Tag,
 } from 'lucide-react';
 
 interface DashboardPageProps {
@@ -56,10 +61,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
   const [loginError, setLoginError] = useState<string | null>(null);
 
   // Dashboard content state
-  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'analytics'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'promos' | 'analytics'>('orders');
   const [orders, setOrders] = useState<Order[]>([]);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [promos, setPromos] = useState<PromoCode[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
   const [loadingData, setLoadingData] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -81,6 +87,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
   const [itemDescription, setItemDescription] = useState('');
   const [itemImageUrl, setItemImageUrl] = useState('');
   const [itemSaving, setItemSaving] = useState(false);
+
+  // Promo Code Modal State
+  const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
+  const [newPromoCode, setNewPromoCode] = useState('');
+  const [newPromoType, setNewPromoType] = useState<'PERCENTAGE' | 'FIXED'>('PERCENTAGE');
+  const [newPromoValue, setNewPromoValue] = useState('');
+  const [newPromoMinOrder, setNewPromoMinOrder] = useState('');
+  const [promoSaving, setPromoSaving] = useState(false);
 
   const playOrderChime = () => {
     if (!soundEnabled) return;
@@ -123,10 +137,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
     if (!isPolling) setLoadingData(true);
     setActionError(null);
     try {
-      const [fetchedOrders, fetchedMenu, fetchedAnalytics] = await Promise.all([
+      const [fetchedOrders, fetchedMenu, fetchedAnalytics, fetchedPromos] = await Promise.all([
         fetchDashboardOrders(authToken),
         fetchDashboardMenu(authToken),
         fetchDashboardAnalytics(authToken).catch(() => null),
+        fetchDashboardPromos(authToken).catch(() => []),
       ]);
 
       if (isPolling && prevOrderCountRef.current > 0 && fetchedOrders.length > prevOrderCountRef.current) {
@@ -142,6 +157,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
       setOrders(fetchedOrders);
       setCategories(fetchedMenu.categories);
       setMenuItems(fetchedMenu.items);
+      setPromos(fetchedPromos);
       if (fetchedAnalytics) {
         setAnalytics(fetchedAnalytics);
       }
@@ -283,6 +299,70 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
     }
   };
 
+  const handleOpenCreatePromo = () => {
+    setNewPromoCode('');
+    setNewPromoType('PERCENTAGE');
+    setNewPromoValue('');
+    setNewPromoMinOrder('');
+    setIsPromoModalOpen(true);
+  };
+
+  const handleSavePromo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
+
+    const val = Number(newPromoValue);
+    if (newPromoType === 'PERCENTAGE' && (val <= 0 || val > 100)) {
+      alert('Percentage discount must be between 1 and 100.');
+      return;
+    }
+    if (newPromoType === 'FIXED' && val <= 0) {
+      alert('Fixed discount must be greater than 0.');
+      return;
+    }
+
+    const discountValue = newPromoType === 'PERCENTAGE' ? val : Math.round(val * 100);
+    const minOrderAmount = newPromoMinOrder ? Math.round(Number(newPromoMinOrder) * 100) : undefined;
+
+    setPromoSaving(true);
+    try {
+      const created = await createDashboardPromo(token, {
+        code: newPromoCode.trim().toUpperCase(),
+        discountType: newPromoType,
+        discountValue,
+        minOrderAmount,
+      });
+      setPromos((prev) => [...prev, created]);
+      setIsPromoModalOpen(false);
+    } catch (err: any) {
+      alert(err.message || 'Failed to create promo code');
+    } finally {
+      setPromoSaving(false);
+    }
+  };
+
+  const handleTogglePromoStatus = async (id: string, currentStatus: boolean) => {
+    if (!token) return;
+    try {
+      const updated = await toggleDashboardPromo(token, id, !currentStatus);
+      setPromos((prev) => prev.map((p) => (p.id === id ? updated : p)));
+    } catch (err: any) {
+      alert(err.message || 'Failed to update promo code status');
+    }
+  };
+
+  const handleDeletePromo = async (id: string, code: string) => {
+    if (!token) return;
+    if (!window.confirm(`Delete promo code "${code}"?`)) return;
+
+    try {
+      await deleteDashboardPromo(token, id);
+      setPromos((prev) => prev.filter((p) => p.id !== id));
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete promo code');
+    }
+  };
+
   const handlePrintTicket = (ord: Order) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
@@ -323,6 +403,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
               )
               .join('')}
           </div>
+          ${ord.discount && ord.discount > 0 ? `
+            <div class="item-row" style="color: green;">
+              <span>PROMO (${ord.promoCode || 'DISCOUNT'}):</span>
+              <span>-${currentUser?.currencySymbol || '$'}${(ord.discount / 100).toFixed(2)}</span>
+            </div>
+          ` : ''}
           <div class="dashed"></div>
           <div class="item-row bold" style="font-size: 15px">
             <span>TOTAL:</span>
@@ -432,7 +518,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
       alert('No orders to export.');
       return;
     }
-    const headers = ['Order Ref', 'Date', 'Time', 'Customer', 'Type', 'Table/Phone', 'Status', 'Items', 'Subtotal', 'Tax', 'Total'];
+    const headers = ['Order Ref', 'Date', 'Time', 'Customer', 'Type', 'Table/Phone', 'Status', 'Items', 'Subtotal', 'Promo Code', 'Discount', 'Tax', 'Total'];
     const rows = orders.map((o) => [
       o.orderRef,
       new Date(o.createdAt).toLocaleDateString(),
@@ -443,6 +529,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
       o.status,
       `"${o.items.map((i) => `${i.quantity}x ${i.name}`).join('; ')}"`,
       (o.subtotal / 100).toFixed(2),
+      o.promoCode || 'NONE',
+      o.discount ? (o.discount / 100).toFixed(2) : '0.00',
       (o.tax / 100).toFixed(2),
       (o.total / 100).toFixed(2),
     ]);
@@ -591,6 +679,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
           <Sliders size={16} /> Menu Management ({menuItems.length} items)
         </button>
         <button
+          className={`btn btn-sm ${activeTab === 'promos' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setActiveTab('promos')}
+        >
+          <Tag size={16} /> Promo Codes ({promos.length})
+        </button>
+        <button
           className={`btn btn-sm ${activeTab === 'analytics' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => setActiveTab('analytics')}
         >
@@ -716,6 +810,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
                         ))}
                       </tbody>
                     </table>
+
+                    {ord.discount && ord.discount > 0 ? (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#059669', fontSize: '0.8rem', fontWeight: 600, padding: '0.2rem 0' }}>
+                        <span>Promo Discount ({ord.promoCode || 'PROMO'})</span>
+                        <span>-{currentUser.currencySymbol}{(ord.discount / 100).toFixed(2)}</span>
+                      </div>
+                    ) : null}
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9', paddingTop: '0.5rem', fontWeight: 800, fontSize: '0.95rem', marginBottom: '0.75rem' }}>
                       <span>Total Due</span>
@@ -888,6 +989,103 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
               );
             })}
           </div>
+        </div>
+      ) : activeTab === 'promos' ? (
+        /* Promo Codes View */
+        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '1.25rem' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Tag size={20} color="#059669" />
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Promotions & Discount Codes</h2>
+              </div>
+              <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: 2 }}>
+                Configure coupon codes for customer checkout with automated server validation.
+              </p>
+            </div>
+            <button className="btn btn-primary btn-sm" onClick={handleOpenCreatePromo}>
+              <Plus size={15} /> Create Promo Code
+            </button>
+          </div>
+
+          {promos.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#64748b' }}>
+              <Tag size={36} color="#cbd5e1" style={{ margin: '0 auto 0.75rem' }} />
+              <p style={{ fontWeight: 600 }}>No promo codes yet</p>
+              <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Create your first discount code to boost orders!</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {promos.map((p) => (
+                <div
+                  key={p.id}
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '1rem',
+                    padding: '1rem',
+                    background: p.isActive ? '#ffffff' : '#f8fafc',
+                    borderRadius: 10,
+                    border: '1px solid #e2e8f0',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div
+                      style={{
+                        background: p.isActive ? '#d1fae5' : '#f1f5f9',
+                        color: p.isActive ? '#065f46' : '#94a3b8',
+                        padding: '0.4rem 0.75rem',
+                        borderRadius: 8,
+                        fontWeight: 800,
+                        letterSpacing: '0.05em',
+                        fontSize: '0.95rem',
+                        border: '1px dashed #cbd5e1',
+                      }}
+                    >
+                      {p.code}
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>
+                        {p.discountType === 'PERCENTAGE'
+                          ? `${p.discountValue}% OFF Total Order`
+                          : `${currentUser.currencySymbol}${(p.discountValue / 100).toFixed(2)} Flat Discount`}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        {p.minOrderAmount
+                          ? `Min. order ${currentUser.currencySymbol}${(p.minOrderAmount / 100).toFixed(2)} required`
+                          : 'No minimum order required'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{
+                        fontSize: '0.75rem',
+                        color: p.isActive ? '#059669' : '#94a3b8',
+                        borderColor: p.isActive ? '#a7f3d0' : '#e2e8f0',
+                      }}
+                      onClick={() => handleTogglePromoStatus(p.id, p.isActive)}
+                    >
+                      {p.isActive ? 'Active' : 'Inactive'}
+                    </button>
+
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ color: '#ef4444' }}
+                      onClick={() => handleDeletePromo(p.id, p.code)}
+                      title="Delete Promo Code"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ) : (
         /* Insights & Analytics View */
@@ -1191,6 +1389,98 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
                   disabled={itemSaving}
                 >
                   {itemSaving ? 'Saving...' : editingItem ? 'Save Changes' : 'Create Item'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create Promo Code Modal */}
+      {isPromoModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsPromoModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Create New Promo Code</h2>
+              <button onClick={() => setIsPromoModalOpen(false)} style={{ color: '#94a3b8' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePromo}>
+              <div className="form-group">
+                <label className="form-label">Promo Code *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. SUMMER20"
+                  className="form-input"
+                  style={{ textTransform: 'uppercase' }}
+                  value={newPromoCode}
+                  onChange={(e) => setNewPromoCode(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Discount Type *</label>
+                  <select
+                    className="form-input"
+                    value={newPromoType}
+                    onChange={(e) => setNewPromoType(e.target.value as any)}
+                  >
+                    <option value="PERCENTAGE">Percentage (%)</option>
+                    <option value="FIXED">Fixed Amount ({currentUser.currencySymbol})</option>
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">
+                    Discount Value {newPromoType === 'PERCENTAGE' ? '(%)' : `(${currentUser.currencySymbol})`} *
+                  </label>
+                  <input
+                    type="number"
+                    step={newPromoType === 'PERCENTAGE' ? '1' : '0.01'}
+                    min={newPromoType === 'PERCENTAGE' ? '1' : '0.50'}
+                    max={newPromoType === 'PERCENTAGE' ? '100' : '500'}
+                    required
+                    placeholder={newPromoType === 'PERCENTAGE' ? 'e.g. 15' : 'e.g. 3.00'}
+                    className="form-input"
+                    value={newPromoValue}
+                    onChange={(e) => setNewPromoValue(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                <label className="form-label">Minimum Order Amount (Optional, {currentUser.currencySymbol})</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="e.g. 15.00"
+                  className="form-input"
+                  value={newPromoMinOrder}
+                  onChange={(e) => setNewPromoMinOrder(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
+                  onClick={() => setIsPromoModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ flex: 1 }}
+                  disabled={promoSaving}
+                >
+                  {promoSaving ? 'Creating...' : 'Create Promo Code'}
                 </button>
               </div>
             </form>

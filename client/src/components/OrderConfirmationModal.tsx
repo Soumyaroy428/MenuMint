@@ -102,7 +102,14 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
             ))}
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem', fontWeight: 800, fontSize: '1.05rem' }}>
+          {order.discount && order.discount > 0 ? (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem', color: '#059669', fontSize: '0.85rem', fontWeight: 600 }}>
+              <span>Promo Discount ({order.promoCode || 'PROMO'})</span>
+              <span>- {currencySymbol}{(order.discount / 100).toFixed(2)}</span>
+            </div>
+          ) : null}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem', fontWeight: 800, fontSize: '1.05rem' }}>
             <span>Total Confirmed</span>
             <span style={{ color: '#059669' }}>
               {currencySymbol}{(order.total / 100).toFixed(2)}

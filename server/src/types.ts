@@ -55,10 +55,25 @@ export interface Order {
   notes?: string;
   items: OrderItemSnapshot[];
   subtotal: number;
+  discount?: number; // in cents
+  promoCode?: string;
   tax: number;
   total: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export type DiscountType = 'PERCENTAGE' | 'FIXED';
+
+export interface PromoCode {
+  id: string;
+  cafeId: string;
+  code: string;
+  discountType: DiscountType;
+  discountValue: number; // percentage (e.g., 10) or cents (e.g., 200)
+  minOrderAmount?: number; // minimum subtotal in cents required to apply
+  isActive: boolean;
+  createdAt: string;
 }
 
 export interface User {

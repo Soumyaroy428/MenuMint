@@ -274,3 +274,116 @@ dashboardRouter.get('/analytics', (req: AuthenticatedRequest, res: Response): vo
   });
 });
 
+// 9. Get all promo codes for the authenticated café
+dashboardRouter.get('/promos', (req: AuthenticatedRequest, res: Response): void => {
+  const cafeId = req.user!.cafeId;
+  const promos = db.getPromoCodesByCafeId(cafeId);
+
+  res.json({
+    promos,
+  });
+});
+
+// 10. Create a new promo code
+dashboardRouter.post('/promos', (req: AuthenticatedRequest, res: Response): void => {
+  const cafeId = req.user!.cafeId;
+  const { code, discountType, discountValue, minOrderAmount } = req.body;
+
+  if (!code || typeof code !== 'string' || code.trim().length === 0) {
+    res.status(400).json({ error: 'Validation Error', message: 'Promo code is required.' });
+    return;
+  }
+
+  const cleanCode = code.trim().toUpperCase();
+  const existing = db.getPromoCode(cafeId, cleanCode);
+  if (existing) {
+    res.status(400).json({ error: 'Conflict', message: `Promo code "${cleanCode}" already exists for your café.` });
+    return;
+  }
+
+  if (discountType !== 'PERCENTAGE' && discountType !== 'FIXED') {
+    res.status(400).json({ error: 'Validation Error', message: 'discountType must be either "PERCENTAGE" or "FIXED".' });
+    return;
+  }
+
+  const numericValue = Number(discountValue);
+  if (discountType === 'PERCENTAGE') {
+    if (!Number.isInteger(numericValue) || numericValue <= 0 || numericValue > 100) {
+      res.status(400).json({ error: 'Validation Error', message: 'Percentage discount must be an integer between 1 and 100.' });
+      return;
+    }
+  } else {
+    if (!Number.isInteger(numericValue) || numericValue <= 0 || numericValue > 100000) {
+      res.status(400).json({ error: 'Validation Error', message: 'Fixed discount must be a positive integer in cents.' });
+      return;
+    }
+  }
+
+  let minAmount: number | undefined = undefined;
+  if (minOrderAmount !== undefined && minOrderAmount !== null && minOrderAmount !== '') {
+    const parsedMin = Number(minOrderAmount);
+    if (!Number.isInteger(parsedMin) || parsedMin < 0) {
+      res.status(400).json({ error: 'Validation Error', message: 'Minimum order amount must be a non-negative integer in cents.' });
+      return;
+    }
+    minAmount = parsedMin;
+  }
+
+  const createdPromo = db.createPromoCode({
+    cafeId,
+    code: cleanCode,
+    discountType,
+    discountValue: numericValue,
+    minOrderAmount: minAmount,
+    isActive: true,
+  });
+
+  res.status(201).json({
+    success: true,
+    message: `Promo code "${createdPromo.code}" created successfully.`,
+    promo: createdPromo,
+  });
+});
+
+// 11. Toggle promo code active status
+dashboardRouter.patch('/promos/:id/status', (req: AuthenticatedRequest, res: Response): void => {
+  const { id } = req.params;
+  const { isActive } = req.body;
+  const cafeId = req.user!.cafeId;
+
+  if (typeof isActive !== 'boolean') {
+    res.status(400).json({ error: 'Validation Error', message: 'isActive must be a boolean.' });
+    return;
+  }
+
+  const updated = db.togglePromoCode(id, cafeId, isActive);
+  if (!updated) {
+    res.status(404).json({ error: 'Not Found', message: 'Promo code not found or does not belong to your café.' });
+    return;
+  }
+
+  res.json({
+    success: true,
+    message: `Promo code "${updated.code}" is now ${isActive ? 'active' : 'inactive'}.`,
+    promo: updated,
+  });
+});
+
+// 12. Delete promo code
+dashboardRouter.delete('/promos/:id', (req: AuthenticatedRequest, res: Response): void => {
+  const { id } = req.params;
+  const cafeId = req.user!.cafeId;
+
+  const deleted = db.deletePromoCode(id, cafeId);
+  if (!deleted) {
+    res.status(404).json({ error: 'Not Found', message: 'Promo code not found or does not belong to your café.' });
+    return;
+  }
+
+  res.json({
+    success: true,
+    message: 'Promo code deleted successfully.',
+  });
+});
+
+

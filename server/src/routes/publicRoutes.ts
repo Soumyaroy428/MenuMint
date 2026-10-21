@@ -83,7 +83,7 @@ publicRouter.get('/cafes/:slug/menu', (req: Request, res: Response): void => {
 
 // 3. Submit an order (Server-authoritative calculation and validation)
 publicRouter.post('/orders', (req: Request, res: Response): void => {
-  const { cafeSlug, cafeId, orderType, customerName, customerPhone, tableNumber, notes, items } = req.body;
+  const { cafeSlug, cafeId, orderType, customerName, customerPhone, tableNumber, notes, items, promoCode } = req.body;
 
   // Resolve café
   const cafe = cafeSlug ? db.getCafeBySlug(cafeSlug) : db.getCafeById(cafeId);
@@ -197,9 +197,41 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
     });
   }
 
-  // Calculate tax (5% flat demo tax)
-  const calculatedTax = Math.round(calculatedSubtotal * 0.05);
-  const calculatedTotal = calculatedSubtotal + calculatedTax;
+  // Handle promo code discount if provided
+  let discountAmount = 0;
+  let appliedPromoCode: string | undefined = undefined;
+
+  if (promoCode && typeof promoCode === 'string' && promoCode.trim().length > 0) {
+    const cleanCode = promoCode.trim().toUpperCase();
+    const promo = db.getPromoCode(cafe.id, cleanCode);
+    if (!promo || !promo.isActive) {
+      res.status(400).json({
+        error: 'Invalid Promo Code',
+        message: `Promo code "${cleanCode}" is invalid or inactive for ${cafe.name}.`,
+      });
+      return;
+    }
+
+    if (promo.minOrderAmount && calculatedSubtotal < promo.minOrderAmount) {
+      res.status(400).json({
+        error: 'Minimum Order Not Met',
+        message: `Promo code "${cleanCode}" requires a minimum order of ${cafe.currencySymbol}${(promo.minOrderAmount / 100).toFixed(2)}.`,
+      });
+      return;
+    }
+
+    if (promo.discountType === 'PERCENTAGE') {
+      discountAmount = Math.round((calculatedSubtotal * promo.discountValue) / 100);
+    } else {
+      discountAmount = Math.min(calculatedSubtotal, promo.discountValue);
+    }
+    appliedPromoCode = promo.code;
+  }
+
+  // Calculate tax (5% flat demo tax) on post-discount subtotal
+  const discountedSubtotal = Math.max(0, calculatedSubtotal - discountAmount);
+  const calculatedTax = Math.round(discountedSubtotal * 0.05);
+  const calculatedTotal = discountedSubtotal + calculatedTax;
 
   // Persist order
   const newOrder = db.createOrder({
@@ -212,6 +244,8 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
     notes: notes ? String(notes).trim().slice(0, 300) : undefined,
     items: orderItemSnapshots,
     subtotal: calculatedSubtotal,
+    discount: discountAmount > 0 ? discountAmount : undefined,
+    promoCode: appliedPromoCode,
     tax: calculatedTax,
     total: calculatedTotal,
   });
@@ -229,6 +263,8 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
       tableNumber: newOrder.tableNumber,
       items: newOrder.items,
       subtotal: newOrder.subtotal,
+      discount: newOrder.discount,
+      promoCode: newOrder.promoCode,
       tax: newOrder.tax,
       total: newOrder.total,
       currency: cafe.currency,
@@ -265,11 +301,70 @@ publicRouter.get('/orders/:orderRef', (req: Request, res: Response): void => {
       tableNumber: order.tableNumber,
       items: order.items,
       subtotal: order.subtotal,
+      discount: order.discount,
+      promoCode: order.promoCode,
       tax: order.tax,
       total: order.total,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
     },
+  });
+});
+
+// 5. Validate promo code for customer cart
+publicRouter.post('/cafes/:slug/promo/validate', (req: Request, res: Response): void => {
+  const { slug } = req.params;
+  const { code, subtotal } = req.body;
+
+  const cafe = db.getCafeBySlug(slug);
+  if (!cafe) {
+    res.status(404).json({ error: 'Not Found', message: 'Café not found.' });
+    return;
+  }
+
+  if (!code || typeof code !== 'string' || code.trim().length === 0) {
+    res.status(400).json({ error: 'Validation Error', message: 'Promo code is required.' });
+    return;
+  }
+
+  const cleanCode = code.trim().toUpperCase();
+  const promo = db.getPromoCode(cafe.id, cleanCode);
+  if (!promo || !promo.isActive) {
+    res.status(400).json({
+      valid: false,
+      error: 'Invalid Promo Code',
+      message: `Promo code "${cleanCode}" is invalid or expired for ${cafe.name}.`,
+    });
+    return;
+  }
+
+  const numericSubtotal = Number(subtotal) || 0;
+  if (promo.minOrderAmount && numericSubtotal < promo.minOrderAmount) {
+    res.status(400).json({
+      valid: false,
+      error: 'Minimum Order Not Met',
+      message: `Requires a minimum order of ${cafe.currencySymbol}${(promo.minOrderAmount / 100).toFixed(2)}.`,
+    });
+    return;
+  }
+
+  let discountAmount = 0;
+  if (promo.discountType === 'PERCENTAGE') {
+    discountAmount = Math.round((numericSubtotal * promo.discountValue) / 100);
+  } else {
+    discountAmount = Math.min(numericSubtotal, promo.discountValue);
+  }
+
+  res.json({
+    valid: true,
+    code: promo.code,
+    discountType: promo.discountType,
+    discountValue: promo.discountValue,
+    discountAmount,
+    message:
+      promo.discountType === 'PERCENTAGE'
+        ? `${promo.discountValue}% discount applied!`
+        : `${cafe.currencySymbol}${(promo.discountValue / 100).toFixed(2)} discount applied!`,
   });
 });
 

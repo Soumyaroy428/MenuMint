@@ -1,4 +1,4 @@
-import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary } from './types.js';
+import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode } from './types.js';
 import bcrypt from 'bcryptjs';
 
 // Pre-seeded database in memory with consistent IDs and tenant isolation
@@ -255,6 +255,37 @@ class Database {
     },
   ];
 
+  promoCodes: PromoCode[] = [
+    {
+      id: 'promo-1',
+      cafeId: 'cafe-1',
+      code: 'MINT10',
+      discountType: 'PERCENTAGE',
+      discountValue: 10, // 10% off
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: 'promo-2',
+      cafeId: 'cafe-1',
+      code: 'WELCOME5',
+      discountType: 'FIXED',
+      discountValue: 500, // $5.00 off
+      minOrderAmount: 1500, // Min $15 order
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: 'promo-201',
+      cafeId: 'cafe-2',
+      code: 'BELLA15',
+      discountType: 'PERCENTAGE',
+      discountValue: 15, // 15% off
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    },
+  ];
+
   private orderCounter = 1003;
 
   // Accessors
@@ -412,6 +443,45 @@ class Database {
 
   getUserByEmail(email: string): User | undefined {
     return this.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+  }
+
+  getPromoCodesByCafeId(cafeId: string): PromoCode[] {
+    return this.promoCodes.filter((p) => p.cafeId === cafeId);
+  }
+
+  getPromoCode(cafeId: string, code: string): PromoCode | undefined {
+    return this.promoCodes.find(
+      (p) => p.cafeId === cafeId && p.code.toUpperCase() === code.trim().toUpperCase()
+    );
+  }
+
+  createPromoCode(promo: Omit<PromoCode, 'id' | 'createdAt'>): PromoCode {
+    const newPromo: PromoCode = {
+      ...promo,
+      code: promo.code.trim().toUpperCase(),
+      id: `promo-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      createdAt: new Date().toISOString(),
+    };
+    this.promoCodes.push(newPromo);
+    return newPromo;
+  }
+
+  togglePromoCode(id: string, cafeId: string, isActive: boolean): PromoCode | undefined {
+    const promo = this.promoCodes.find((p) => p.id === id && p.cafeId === cafeId);
+    if (promo) {
+      promo.isActive = isActive;
+      return promo;
+    }
+    return undefined;
+  }
+
+  deletePromoCode(id: string, cafeId: string): boolean {
+    const idx = this.promoCodes.findIndex((p) => p.id === id && p.cafeId === cafeId);
+    if (idx !== -1) {
+      this.promoCodes.splice(idx, 1);
+      return true;
+    }
+    return false;
   }
 }
 

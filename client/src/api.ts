@@ -1,4 +1,4 @@
-import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary } from './types';
+import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode } from './types';
 
 const API_BASE = '/api';
 
@@ -27,6 +27,7 @@ export async function submitOrder(orderData: {
   customerPhone?: string;
   tableNumber?: string;
   notes?: string;
+  promoCode?: string;
   items: { menuItemId: string; quantity: number }[];
 }): Promise<{ success: boolean; order: Order; message: string }> {
   const res = await fetch(`${API_BASE}/orders`, {
@@ -187,6 +188,94 @@ export async function fetchDashboardAnalytics(token: string): Promise<AnalyticsS
   const data = await res.json();
   return data.analytics;
 }
+
+export async function validatePromoCode(
+  cafeSlug: string,
+  code: string,
+  subtotal: number
+): Promise<{
+  valid: boolean;
+  code: string;
+  discountType: string;
+  discountValue: number;
+  discountAmount: number;
+  message: string;
+}> {
+  const res = await fetch(`${API_BASE}/cafes/${cafeSlug}/promo/validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, subtotal }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Invalid promo code');
+  }
+  return data;
+}
+
+export async function fetchDashboardPromos(token: string): Promise<PromoCode[]> {
+  const res = await fetch(`${API_BASE}/dashboard/promos`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to fetch promo codes');
+  }
+  const data = await res.json();
+  return data.promos;
+}
+
+export async function createDashboardPromo(
+  token: string,
+  promo: {
+    code: string;
+    discountType: 'PERCENTAGE' | 'FIXED';
+    discountValue: number;
+    minOrderAmount?: number;
+  }
+): Promise<PromoCode> {
+  const res = await fetch(`${API_BASE}/dashboard/promos`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(promo),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to create promo code');
+  }
+  return data.promo;
+}
+
+export async function toggleDashboardPromo(token: string, id: string, isActive: boolean): Promise<PromoCode> {
+  const res = await fetch(`${API_BASE}/dashboard/promos/${id}/status`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ isActive }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to update promo status');
+  }
+  return data.promo;
+}
+
+export async function deleteDashboardPromo(token: string, id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/dashboard/promos/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to delete promo code');
+  }
+}
+
 
 
 
