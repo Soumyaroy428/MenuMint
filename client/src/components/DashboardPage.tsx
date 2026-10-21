@@ -6,6 +6,9 @@ import {
   updateOrderStatus,
   fetchDashboardMenu,
   toggleItemAvailability,
+  createMenuItem,
+  updateMenuItem,
+  deleteMenuItem,
 } from '../api';
 import {
   Lock,
@@ -22,6 +25,10 @@ import {
   Printer,
   Volume2,
   VolumeX,
+  Plus,
+  Pencil,
+  Trash2,
+  X,
 } from 'lucide-react';
 
 interface DashboardPageProps {
@@ -57,6 +64,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
   const [newOrderAlert, setNewOrderAlert] = useState<string | null>(null);
   const prevOrderCountRef = useRef<number>(0);
 
+  // Item Management Modal State
+  const [isItemModalOpen, setIsItemModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [itemName, setItemName] = useState('');
+  const [itemCategory, setItemCategory] = useState('');
+  const [itemPrice, setItemPrice] = useState('');
+  const [itemDescription, setItemDescription] = useState('');
+  const [itemImageUrl, setItemImageUrl] = useState('');
+  const [itemSaving, setItemSaving] = useState(false);
+
   const playOrderChime = () => {
     if (!soundEnabled) return;
     try {
@@ -64,8 +81,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5 note
-      osc.frequency.setValueAtTime(880.0, audioCtx.currentTime + 0.15); // A5 note
+      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+      osc.frequency.setValueAtTime(880.0, audioCtx.currentTime + 0.15); // A5
       gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
       osc.connect(gain);
@@ -103,7 +120,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
         fetchDashboardMenu(authToken),
       ]);
 
-      // Check if new order arrived during polling
       if (isPolling && prevOrderCountRef.current > 0 && fetchedOrders.length > prevOrderCountRef.current) {
         const newest = fetchedOrders[0];
         if (newest && newest.status === 'PENDING') {
@@ -176,6 +192,85 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
     }
   };
 
+  // Item Modal Handlers
+  const handleOpenAddModal = () => {
+    setEditingItem(null);
+    setItemName('');
+    setItemCategory(categories[0]?.id || '');
+    setItemPrice('');
+    setItemDescription('');
+    setItemImageUrl('');
+    setIsItemModalOpen(true);
+  };
+
+  const handleOpenEditModal = (item: MenuItem) => {
+    setEditingItem(item);
+    setItemName(item.name);
+    setItemCategory(item.categoryId);
+    setItemPrice((item.price / 100).toFixed(2));
+    setItemDescription(item.description || '');
+    setItemImageUrl(item.imageUrl || '');
+    setIsItemModalOpen(true);
+  };
+
+  const handleSaveItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
+
+    if (!itemName.trim()) {
+      alert('Item name is required.');
+      return;
+    }
+
+    const priceInCents = Math.round(parseFloat(itemPrice) * 100);
+    if (isNaN(priceInCents) || priceInCents <= 0) {
+      alert('Please enter a valid positive price.');
+      return;
+    }
+
+    setItemSaving(true);
+    setActionError(null);
+    try {
+      if (editingItem) {
+        const updated = await updateMenuItem(token, editingItem.id, {
+          name: itemName.trim(),
+          categoryId: itemCategory,
+          price: priceInCents,
+          description: itemDescription.trim(),
+          imageUrl: itemImageUrl.trim(),
+        });
+        setMenuItems((prev) => prev.map((i) => (i.id === editingItem.id ? updated : i)));
+      } else {
+        const created = await createMenuItem(token, {
+          name: itemName.trim(),
+          categoryId: itemCategory,
+          price: priceInCents,
+          description: itemDescription.trim(),
+          imageUrl: itemImageUrl.trim(),
+        });
+        setMenuItems((prev) => [...prev, created]);
+      }
+      setIsItemModalOpen(false);
+    } catch (err: any) {
+      alert(err.message || 'Failed to save menu item');
+    } finally {
+      setItemSaving(false);
+    }
+  };
+
+  const handleDeleteItem = async (itemId: string, name: string) => {
+    if (!token) return;
+    if (!window.confirm(`Are you sure you want to delete "${name}" from the menu?`)) return;
+
+    setActionError(null);
+    try {
+      await deleteMenuItem(token, itemId);
+      setMenuItems((prev) => prev.filter((i) => i.id !== itemId));
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to delete menu item');
+    }
+  };
+
   const handlePrintTicket = (ord: Order) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
@@ -186,13 +281,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
         <head>
           <title>Kitchen Ticket - ${ord.orderRef}</title>
           <style>
-            body {
-              font-family: monospace;
-              padding: 16px;
-              max-width: 280px;
-              margin: 0 auto;
-              color: #000;
-            }
+            body { font-family: monospace; padding: 16px; max-width: 280px; margin: 0 auto; color: #000; }
             .center { text-align: center; }
             .dashed { border-bottom: 2px dashed #000; margin: 10px 0; }
             .item-row { display: flex; justify-content: space-between; margin: 4px 0; }
@@ -208,11 +297,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
             <div>${new Date(ord.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
             <div style="margin-top:4px">Customer: ${ord.customerName}</div>
           </div>
-
           <div class="dashed"></div>
-
           ${ord.notes ? `<div class="note-box"><strong>KITCHEN NOTE:</strong> ${ord.notes}</div>` : ''}
-
           <div>
             ${ord.items
               .map(
@@ -225,14 +311,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
               )
               .join('')}
           </div>
-
           <div class="dashed"></div>
-
           <div class="item-row bold" style="font-size: 15px">
             <span>TOTAL:</span>
             <span>${currentUser?.currencySymbol || '$'}${(ord.total / 100).toFixed(2)}</span>
           </div>
-
           <div class="center" style="margin-top: 16px; font-size: 11px">
             *** KITCHEN COPY ***
           </div>
@@ -337,7 +420,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
             zIndex: 100,
             fontWeight: 700,
             fontSize: '0.9rem',
-            animation: 'slideUp 0.2s ease-out',
             display: 'flex',
             alignItems: 'center',
             gap: '0.5rem',
@@ -432,7 +514,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
           className={`btn btn-sm ${activeTab === 'menu' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => setActiveTab('menu')}
         >
-          <Sliders size={16} /> Menu Availability ({menuItems.length} items)
+          <Sliders size={16} /> Menu Management ({menuItems.length} items)
         </button>
       </div>
 
@@ -621,12 +703,19 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
           )}
         </div>
       ) : (
-        /* Menu Availability Management */
+        /* Menu Management */
         <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem' }}>
-          <h2 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '0.5rem' }}>Menu Item Availability</h2>
-          <p style={{ color: '#64748b', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
-            Quickly toggle items between Available and Sold Out. Changes reflect instantly on your customer's digital menu.
-          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '1.25rem' }}>
+            <div>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Café Menu Catalog</h2>
+              <p style={{ color: '#64748b', fontSize: '0.85rem' }}>
+                Add new items, update prices, and control real-time inventory availability.
+              </p>
+            </div>
+            <button className="btn btn-primary btn-sm" onClick={handleOpenAddModal}>
+              <Plus size={15} /> Add Menu Item
+            </button>
+          </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {menuItems.map((item) => {
@@ -636,34 +725,167 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
                   key={item.id}
                   style={{
                     display: 'flex',
+                    flexWrap: 'wrap',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    padding: '0.75rem',
-                    border: '1px solid #f1f5f9',
-                    borderRadius: 8,
+                    padding: '0.85rem 1rem',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 10,
                     background: item.isAvailable ? '#ffffff' : '#f8fafc',
+                    gap: '0.75rem',
                   }}
                 >
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{item.name}</div>
-                    <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                      {category?.name || 'Item'} • {currentUser.currencySymbol}{(item.price / 100).toFixed(2)}
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <strong style={{ fontSize: '1rem' }}>{item.name}</strong>
+                      <span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>
+                        {category?.name || 'Item'}
+                      </span>
+                    </div>
+                    {item.description && (
+                      <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 2 }}>{item.description}</p>
+                    )}
+                    <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#059669', marginTop: 4 }}>
+                      {currentUser.currencySymbol}{(item.price / 100).toFixed(2)}
                     </div>
                   </div>
 
-                  <button
-                    className={`btn btn-sm ${item.isAvailable ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{
-                      background: item.isAvailable ? '#10b981' : '#f1f5f9',
-                      color: item.isAvailable ? '#ffffff' : '#64748b',
-                    }}
-                    onClick={() => handleToggleAvailability(item.id, item.isAvailable)}
-                  >
-                    {item.isAvailable ? 'In Stock' : 'Sold Out'}
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <button
+                      className={`btn btn-sm ${item.isAvailable ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{
+                        background: item.isAvailable ? '#10b981' : '#f1f5f9',
+                        color: item.isAvailable ? '#ffffff' : '#64748b',
+                        minWidth: 84,
+                      }}
+                      onClick={() => handleToggleAvailability(item.id, item.isAvailable)}
+                      title="Toggle availability"
+                    >
+                      {item.isAvailable ? 'In Stock' : 'Sold Out'}
+                    </button>
+
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => handleOpenEditModal(item)}
+                      title="Edit Item Details"
+                    >
+                      <Pencil size={13} />
+                    </button>
+
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ color: '#ef4444' }}
+                      onClick={() => handleDeleteItem(item.id, item.name)}
+                      title="Delete Item"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Add / Edit Menu Item Modal */}
+      {isItemModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsItemModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>
+                {editingItem ? 'Edit Menu Item' : 'Add New Menu Item'}
+              </h2>
+              <button onClick={() => setIsItemModalOpen(false)} style={{ color: '#94a3b8' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveItem}>
+              <div className="form-group">
+                <label className="form-label">Item Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Iced Pistachio Latte"
+                  className="form-input"
+                  value={itemName}
+                  onChange={(e) => setItemName(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Category *</label>
+                  <select
+                    className="form-input"
+                    value={itemCategory}
+                    onChange={(e) => setItemCategory(e.target.value)}
+                  >
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Price ({currentUser.currencySymbol}) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.50"
+                    required
+                    placeholder="e.g. 5.50"
+                    className="form-input"
+                    value={itemPrice}
+                    onChange={(e) => setItemPrice(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Description (Optional)</label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Sweet pistachio purée shaken with double espresso and whole milk."
+                  className="form-input"
+                  value={itemDescription}
+                  onChange={(e) => setItemDescription(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                <label className="form-label">Image URL (Optional)</label>
+                <input
+                  type="url"
+                  placeholder="https://images.unsplash.com/..."
+                  className="form-input"
+                  value={itemImageUrl}
+                  onChange={(e) => setItemImageUrl(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
+                  onClick={() => setIsItemModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ flex: 1 }}
+                  disabled={itemSaving}
+                >
+                  {itemSaving ? 'Saving...' : editingItem ? 'Save Changes' : 'Create Item'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

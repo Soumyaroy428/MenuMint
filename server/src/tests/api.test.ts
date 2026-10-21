@@ -200,5 +200,72 @@ describe('MenuMint API Test Suite', () => {
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ isAvailable: false });
   });
+
+  // 10. CP-29: Menu Item Management (Create, Edit, Delete with Tenant Isolation)
+  test('POST /api/dashboard/items should create new menu item', async () => {
+    const res = await request(app)
+      .post('/api/dashboard/items')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        name: 'Seasonal Pumpkin Spice Latte',
+        categoryId: 'cat-1',
+        price: 575,
+        description: 'Made with organic spices and house pumpkin purée.',
+        imageUrl: 'https://images.unsplash.com/photo-1541167760496-1628856ab772',
+      });
+
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.success, true);
+    assert.strictEqual(res.body.item.name, 'Seasonal Pumpkin Spice Latte');
+    assert.strictEqual(res.body.item.price, 575);
+    assert.strictEqual(res.body.item.cafeId, 'cafe-1');
+  });
+
+  test('PUT /api/dashboard/items/:id should update existing menu item', async () => {
+    const res = await request(app)
+      .put('/api/dashboard/items/item-1')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        price: 495, // Price increase to $4.95
+        description: 'Updated silky microfoam recipe.',
+      });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.success, true);
+    assert.strictEqual(res.body.item.price, 495);
+  });
+
+  test('Owner of Cafe 1 should be forbidden from editing Cafe 2 item', async () => {
+    // item-201 belongs to cafe-2
+    const res = await request(app)
+      .put('/api/dashboard/items/item-201')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: 'Hacked Item' });
+
+    assert.strictEqual(res.status, 403);
+    assert.strictEqual(res.body.error, 'Forbidden');
+  });
+
+  test('DELETE /api/dashboard/items/:id should delete item for authenticated cafe', async () => {
+    // First create a temporary item
+    const createRes = await request(app)
+      .post('/api/dashboard/items')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        name: 'Temporary Muffin',
+        categoryId: 'cat-3',
+        price: 350,
+      });
+
+    const tempId = createRes.body.item.id;
+
+    // Delete it
+    const deleteRes = await request(app)
+      .delete(`/api/dashboard/items/${tempId}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+
+    assert.strictEqual(deleteRes.status, 200);
+    assert.strictEqual(deleteRes.body.success, true);
+  });
 });
 

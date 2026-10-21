@@ -114,3 +114,57 @@ export async function toggleItemAvailability(token: string, itemId: string, isAv
   return data.item;
 }
 
+export async function createMenuItem(
+  token: string,
+  itemData: { name: string; categoryId: string; price: number; description?: string; imageUrl?: string }
+): Promise<MenuItem> {
+  const res = await fetch(`${API_BASE}/dashboard/items`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(itemData),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to create menu item');
+  }
+  return data.item;
+}
+
+export async function updateMenuItem(
+  token: string,
+  itemId: string,
+  updates: { name?: string; categoryId?: string; price?: number; description?: string; imageUrl?: string; isAvailable?: boolean }
+): Promise<MenuItem> {
+  const res = await fetch(`${API_BASE}/dashboard/items/${itemId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(updates),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to update menu item');
+  }
+  return data.item;
+}
+
+export async function deleteMenuItem(token: string, itemId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/dashboard/items/${itemId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to delete menu item');
+  }
+}
+
+

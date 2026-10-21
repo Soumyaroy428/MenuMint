@@ -127,3 +127,140 @@ dashboardRouter.patch('/items/:id/availability', (req: AuthenticatedRequest, res
   });
 });
 
+// 5. Create a new menu item
+dashboardRouter.post('/items', (req: AuthenticatedRequest, res: Response): void => {
+  const cafeId = req.user!.cafeId;
+  const { name, categoryId, price, description, imageUrl } = req.body;
+
+  if (!name || typeof name !== 'string' || name.trim().length === 0) {
+    res.status(400).json({ error: 'Validation Error', message: 'Item name is required.' });
+    return;
+  }
+
+  if (!categoryId || typeof categoryId !== 'string') {
+    res.status(400).json({ error: 'Validation Error', message: 'Valid categoryId is required.' });
+    return;
+  }
+
+  const categories = db.getCategoriesByCafeId(cafeId);
+  const categoryExists = categories.some((c) => c.id === categoryId);
+  if (!categoryExists) {
+    res.status(400).json({ error: 'Validation Error', message: 'Category not found or does not belong to your café.' });
+    return;
+  }
+
+  const numericPrice = Number(price);
+  if (!Number.isInteger(numericPrice) || numericPrice <= 0 || numericPrice > 100000) {
+    res.status(400).json({ error: 'Validation Error', message: 'Price must be a positive integer in minor units (cents).' });
+    return;
+  }
+
+  const createdItem = db.createMenuItem({
+    cafeId,
+    categoryId,
+    name: name.trim().slice(0, 100),
+    description: description ? String(description).trim().slice(0, 300) : '',
+    price: numericPrice,
+    imageUrl: imageUrl ? String(imageUrl).trim() : '',
+    isAvailable: true,
+  });
+
+  res.status(201).json({
+    success: true,
+    message: `Menu item "${createdItem.name}" created successfully.`,
+    item: createdItem,
+  });
+});
+
+// 6. Update an existing menu item
+dashboardRouter.put('/items/:id', (req: AuthenticatedRequest, res: Response): void => {
+  const { id } = req.params;
+  const cafeId = req.user!.cafeId;
+  const { name, categoryId, price, description, imageUrl, isAvailable } = req.body;
+
+  const item = db.getItemById(id);
+  if (!item) {
+    res.status(404).json({ error: 'Not Found', message: `Menu item with ID "${id}" was not found.` });
+    return;
+  }
+
+  // Tenant Isolation Guard
+  if (item.cafeId !== cafeId) {
+    res.status(403).json({ error: 'Forbidden', message: 'Access denied. You do not have permission to edit this item.' });
+    return;
+  }
+
+  const updates: any = {};
+
+  if (name !== undefined) {
+    if (typeof name !== 'string' || name.trim().length === 0) {
+      res.status(400).json({ error: 'Validation Error', message: 'Item name cannot be empty.' });
+      return;
+    }
+    updates.name = name.trim().slice(0, 100);
+  }
+
+  if (categoryId !== undefined) {
+    const categories = db.getCategoriesByCafeId(cafeId);
+    if (!categories.some((c) => c.id === categoryId)) {
+      res.status(400).json({ error: 'Validation Error', message: 'Selected category does not exist in your café.' });
+      return;
+    }
+    updates.categoryId = categoryId;
+  }
+
+  if (price !== undefined) {
+    const numericPrice = Number(price);
+    if (!Number.isInteger(numericPrice) || numericPrice <= 0 || numericPrice > 100000) {
+      res.status(400).json({ error: 'Validation Error', message: 'Price must be a positive integer in cents.' });
+      return;
+    }
+    updates.price = numericPrice;
+  }
+
+  if (description !== undefined) {
+    updates.description = String(description).trim().slice(0, 300);
+  }
+
+  if (imageUrl !== undefined) {
+    updates.imageUrl = String(imageUrl).trim();
+  }
+
+  if (typeof isAvailable === 'boolean') {
+    updates.isAvailable = isAvailable;
+  }
+
+  const updated = db.updateMenuItem(id, updates);
+
+  res.json({
+    success: true,
+    message: `Menu item "${updated?.name}" updated successfully.`,
+    item: updated,
+  });
+});
+
+// 7. Delete a menu item
+dashboardRouter.delete('/items/:id', (req: AuthenticatedRequest, res: Response): void => {
+  const { id } = req.params;
+  const cafeId = req.user!.cafeId;
+
+  const item = db.getItemById(id);
+  if (!item) {
+    res.status(404).json({ error: 'Not Found', message: `Menu item with ID "${id}" was not found.` });
+    return;
+  }
+
+  // Tenant Isolation Guard
+  if (item.cafeId !== cafeId) {
+    res.status(403).json({ error: 'Forbidden', message: 'Access denied. You do not have permission to delete this item.' });
+    return;
+  }
+
+  db.deleteMenuItem(id);
+
+  res.json({
+    success: true,
+    message: `Menu item "${item.name}" deleted successfully.`,
+  });
+});
+

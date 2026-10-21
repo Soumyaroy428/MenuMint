@@ -289,6 +289,34 @@ class Database {
     return undefined;
   }
 
+  createMenuItem(item: Omit<MenuItem, 'id' | 'createdAt'>): MenuItem {
+    const newItem: MenuItem = {
+      ...item,
+      id: `item-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      createdAt: new Date().toISOString(),
+    };
+    this.menuItems.push(newItem);
+    return newItem;
+  }
+
+  updateMenuItem(id: string, updates: Partial<Omit<MenuItem, 'id' | 'cafeId' | 'createdAt'>>): MenuItem | undefined {
+    const item = this.menuItems.find((i) => i.id === id);
+    if (item) {
+      Object.assign(item, updates);
+      return item;
+    }
+    return undefined;
+  }
+
+  deleteMenuItem(id: string): boolean {
+    const idx = this.menuItems.findIndex((i) => i.id === id);
+    if (idx !== -1) {
+      this.menuItems.splice(idx, 1);
+      return true;
+    }
+    return false;
+  }
+
   createOrder(order: Omit<Order, 'id' | 'orderRef' | 'createdAt' | 'updatedAt'>): Order {
     const newOrder: Order = {
       ...order,
