@@ -1,5 +1,5 @@
 import React from 'react';
-import { Coffee, ShoppingBag, Search, LayoutDashboard } from 'lucide-react';
+import { Coffee, ShoppingBag, Search, LayoutDashboard, QrCode } from 'lucide-react';
 
 interface NavbarProps {
   currentTab: 'menu' | 'dashboard';
@@ -7,6 +7,7 @@ interface NavbarProps {
   cartItemCount: number;
   openCart: () => void;
   openTrackModal: () => void;
+  openQRModal: () => void;
   cafeName?: string;
 }
 
@@ -16,6 +17,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   cartItemCount,
   openCart,
   openTrackModal,
+  openQRModal,
   cafeName = 'MenuMint',
 }) => {
   return (
@@ -36,6 +38,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => setCurrentTab('menu')}
           >
             Digital Menu
+          </button>
+
+          <button className="nav-link" onClick={openQRModal} title="Table QR Codes">
+            <QrCode size={16} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
+            Table QR
           </button>
 
           <button className="nav-link" onClick={openTrackModal} title="Check Order Status">
@@ -76,4 +83,3 @@ export const Navbar: React.FC<NavbarProps> = ({
     </header>
   );
 };
-

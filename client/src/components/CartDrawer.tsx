@@ -12,6 +12,7 @@ interface CartDrawerProps {
   onClearCart: () => void;
   currencySymbol: string;
   cafeSlug: string;
+  defaultTable?: string;
   onOrderSuccess: (order: Order) => void;
 }
 
@@ -24,12 +25,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onClearCart,
   currencySymbol,
   cafeSlug,
+  defaultTable,
   onOrderSuccess,
 }) => {
   const [orderType, setOrderType] = useState<OrderType>('dine-in');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [tableNumber, setTableNumber] = useState('Table 3');
+  const [tableNumber, setTableNumber] = useState(defaultTable || 'Table 3');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);

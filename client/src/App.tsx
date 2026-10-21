@@ -6,23 +6,42 @@ import { MenuPage } from './components/MenuPage';
 import { CartDrawer } from './components/CartDrawer';
 import { OrderConfirmationModal } from './components/OrderConfirmationModal';
 import { TrackOrderModal } from './components/TrackOrderModal';
+import { QRCodeModal } from './components/QRCodeModal';
 import { DashboardPage } from './components/DashboardPage';
 import { ShoppingBag, ArrowRight } from 'lucide-react';
 
 export function App() {
   const [currentTab, setCurrentTab] = useState<'menu' | 'dashboard'>('menu');
-  const [cafeSlug] = useState('daily-grind');
+
+  // Parse URL query parameters if opened via QR code or direct link
+  const [cafeSlug] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('cafe') || 'daily-grind';
+    }
+    return 'daily-grind';
+  });
+
+  const [tableParam] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('table') || '';
+    }
+    return '';
+  });
+
   const [cafe, setCafe] = useState<Cafe | null>(null);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Cart state
+  // Cart & Modal states
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
   const [isTrackModalOpen, setIsTrackModalOpen] = useState(false);
+  const [isQRModalOpen, setIsQRModalOpen] = useState(false);
 
   useEffect(() => {
     loadMenu();
@@ -94,6 +113,7 @@ export function App() {
         cartItemCount={totalCartCount}
         openCart={() => setIsCartOpen(true)}
         openTrackModal={() => setIsTrackModalOpen(true)}
+        openQRModal={() => setIsQRModalOpen(true)}
         cafeName={cafe?.name || 'MenuMint'}
       />
 
@@ -110,7 +130,10 @@ export function App() {
             onRetry={loadMenu}
           />
         ) : (
-          <DashboardPage onBackToMenu={() => setCurrentTab('menu')} />
+          <DashboardPage
+            onBackToMenu={() => setCurrentTab('menu')}
+            openQRModal={() => setIsQRModalOpen(true)}
+          />
         )}
       </main>
 
@@ -148,6 +171,7 @@ export function App() {
               </div>
               <div style={{ fontSize: '0.8rem', color: '#a7f3d0' }}>
                 {cafe?.currencySymbol || '$'}{(totalCartAmount / 100).toFixed(2)} subtotal
+                {tableParam ? ` • ${tableParam}` : ''}
               </div>
             </div>
           </div>
@@ -169,9 +193,9 @@ export function App() {
         onClearCart={handleClearCart}
         currencySymbol={cafe?.currencySymbol || '$'}
         cafeSlug={cafeSlug}
+        defaultTable={tableParam}
         onOrderSuccess={(order) => {
           setConfirmedOrder(order);
-          // Reload menu in case item availability changed
           loadMenu();
         }}
       />
@@ -188,9 +212,16 @@ export function App() {
         isOpen={isTrackModalOpen}
         onClose={() => setIsTrackModalOpen(false)}
       />
+
+      {/* Table QR Code Modal */}
+      <QRCodeModal
+        isOpen={isQRModalOpen}
+        onClose={() => setIsQRModalOpen(false)}
+        cafeName={cafe?.name || 'The Daily Grind Café'}
+        cafeSlug={cafeSlug}
+      />
     </div>
   );
 }
 
 export default App;
-

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { User, Order, MenuItem, MenuCategory, OrderStatus } from '../types';
 import {
   loginOwner,
@@ -18,13 +18,18 @@ import {
   Sliders,
   DollarSign,
   Package,
+  QrCode,
+  Printer,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 
 interface DashboardPageProps {
   onBackToMenu: () => void;
+  openQRModal?: () => void;
 }
 
-export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu }) => {
+export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, openQRModal }) => {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('menumint_token'));
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('menumint_user');
@@ -46,30 +51,79 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu }) =>
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // Auto-refresh & Audio notifications
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [newOrderAlert, setNewOrderAlert] = useState<string | null>(null);
+  const prevOrderCountRef = useRef<number>(0);
+
+  const playOrderChime = () => {
+    if (!soundEnabled) return;
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5 note
+      osc.frequency.setValueAtTime(880.0, audioCtx.currentTime + 0.15); // A5 note
+      gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.55);
+    } catch {
+      // AudioContext may be restricted before interaction
+    }
+  };
+
   useEffect(() => {
     if (token) {
       loadDashboardData(token);
     }
   }, [token]);
 
-  const loadDashboardData = async (authToken: string) => {
-    setLoadingData(true);
+  // Polling loop for live kitchen auto-refresh
+  useEffect(() => {
+    if (!token || !autoRefresh) return;
+
+    const interval = setInterval(() => {
+      loadDashboardData(token, true);
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [token, autoRefresh, soundEnabled]);
+
+  const loadDashboardData = async (authToken: string, isPolling = false) => {
+    if (!isPolling) setLoadingData(true);
     setActionError(null);
     try {
       const [fetchedOrders, fetchedMenu] = await Promise.all([
         fetchDashboardOrders(authToken),
         fetchDashboardMenu(authToken),
       ]);
+
+      // Check if new order arrived during polling
+      if (isPolling && prevOrderCountRef.current > 0 && fetchedOrders.length > prevOrderCountRef.current) {
+        const newest = fetchedOrders[0];
+        if (newest && newest.status === 'PENDING') {
+          playOrderChime();
+          setNewOrderAlert(`🔔 New Order Received: ${newest.orderRef} (${newest.customerName})`);
+          setTimeout(() => setNewOrderAlert(null), 6000);
+        }
+      }
+
+      prevOrderCountRef.current = fetchedOrders.length;
       setOrders(fetchedOrders);
       setCategories(fetchedMenu.categories);
       setMenuItems(fetchedMenu.items);
     } catch (err: any) {
-      setActionError(err.message || 'Failed to load dashboard data');
+      if (!isPolling) setActionError(err.message || 'Failed to load dashboard data');
       if (err.message && err.message.includes('token')) {
         handleLogout();
       }
     } finally {
-      setLoadingData(false);
+      if (!isPolling) setLoadingData(false);
     }
   };
 
@@ -97,6 +151,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu }) =>
     setCurrentUser(null);
     setOrders([]);
     setMenuItems([]);
+    prevOrderCountRef.current = 0;
   };
 
   const handleStatusUpdate = async (orderId: string, nextStatus: OrderStatus) => {
@@ -119,6 +174,75 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu }) =>
     } catch (err: any) {
       setActionError(err.message || 'Failed to update item availability');
     }
+  };
+
+  const handlePrintTicket = (ord: Order) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Kitchen Ticket - ${ord.orderRef}</title>
+          <style>
+            body {
+              font-family: monospace;
+              padding: 16px;
+              max-width: 280px;
+              margin: 0 auto;
+              color: #000;
+            }
+            .center { text-align: center; }
+            .dashed { border-bottom: 2px dashed #000; margin: 10px 0; }
+            .item-row { display: flex; justify-content: space-between; margin: 4px 0; }
+            .bold { font-weight: bold; }
+            .note-box { background: #eee; padding: 4px; margin: 6px 0; font-size: 11px; }
+          </style>
+        </head>
+        <body>
+          <div class="center">
+            <h2 style="margin:0">${currentUser?.cafeName || 'MenuMint'}</h2>
+            <h1 style="margin:4px 0">${ord.orderRef}</h1>
+            <div class="bold">${ord.orderType.toUpperCase()} ${ord.tableNumber ? '• ' + ord.tableNumber : ''}</div>
+            <div>${new Date(ord.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+            <div style="margin-top:4px">Customer: ${ord.customerName}</div>
+          </div>
+
+          <div class="dashed"></div>
+
+          ${ord.notes ? `<div class="note-box"><strong>KITCHEN NOTE:</strong> ${ord.notes}</div>` : ''}
+
+          <div>
+            ${ord.items
+              .map(
+                (item) => `
+              <div class="item-row">
+                <span class="bold">${item.quantity}x ${item.name}</span>
+                <span>${currentUser?.currencySymbol || '$'}${(item.lineTotal / 100).toFixed(2)}</span>
+              </div>
+            `
+              )
+              .join('')}
+          </div>
+
+          <div class="dashed"></div>
+
+          <div class="item-row bold" style="font-size: 15px">
+            <span>TOTAL:</span>
+            <span>${currentUser?.currencySymbol || '$'}${(ord.total / 100).toFixed(2)}</span>
+          </div>
+
+          <div class="center" style="margin-top: 16px; font-size: 11px">
+            *** KITCHEN COPY ***
+          </div>
+          <script>
+            window.onload = () => { window.print(); window.close(); }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   // If not logged in, display login screen
@@ -198,6 +322,31 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu }) =>
 
   return (
     <div className="container" style={{ padding: '1.5rem 1rem 4rem' }}>
+      {/* Toast Alert for New Orders */}
+      {newOrderAlert && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '74px',
+            right: '20px',
+            background: '#065f46',
+            color: '#ffffff',
+            padding: '0.85rem 1.25rem',
+            borderRadius: 10,
+            boxShadow: 'var(--shadow-lg)',
+            zIndex: 100,
+            fontWeight: 700,
+            fontSize: '0.9rem',
+            animation: 'slideUp 0.2s ease-out',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+          }}
+        >
+          <span>{newOrderAlert}</span>
+        </div>
+      )}
+
       {/* Dashboard Header Banner */}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', background: '#ffffff', padding: '1.25rem', borderRadius: 12, border: '1px solid #e2e8f0', marginBottom: '1.5rem' }}>
         <div>
@@ -211,10 +360,30 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu }) =>
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => loadDashboardData(token)} title="Refresh Data">
-            <RefreshCw size={14} /> Refresh
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
+          {openQRModal && (
+            <button className="btn btn-secondary btn-sm" onClick={openQRModal} title="Generate Table QR Codes">
+              <QrCode size={14} /> Table QRs
+            </button>
+          )}
+
+          <button
+            className={`btn btn-sm ${autoRefresh ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setAutoRefresh(!autoRefresh)}
+            title="Toggle Kitchen Live Polling"
+          >
+            <RefreshCw size={14} className={autoRefresh ? 'spin-icon' : ''} />
+            <span>{autoRefresh ? 'Live Polling: ON (10s)' : 'Live Polling: OFF'}</span>
           </button>
+
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => setSoundEnabled(!soundEnabled)}
+            title={soundEnabled ? 'Order sound alert ON' : 'Order sound alert OFF'}
+          >
+            {soundEnabled ? <Volume2 size={14} color="#059669" /> : <VolumeX size={14} color="#94a3b8" />}
+          </button>
+
           <button className="btn btn-secondary btn-sm" onClick={handleLogout} style={{ color: '#ef4444' }}>
             <LogOut size={14} /> Sign Out
           </button>
@@ -320,7 +489,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu }) =>
                           {new Date(ord.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </div>
                       </div>
-                      <span className={`badge ${badgeColor}`}>{ord.status}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span className={`badge ${badgeColor}`}>{ord.status}</span>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '0.2rem 0.5rem' }}
+                          onClick={() => handlePrintTicket(ord)}
+                          title="Print Kitchen Ticket"
+                        >
+                          <Printer size={13} />
+                        </button>
+                      </div>
                     </div>
 
                     <div style={{ fontSize: '0.85rem', marginBottom: '0.5rem' }}>
@@ -491,4 +670,3 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu }) =>
     </div>
   );
 };
-
