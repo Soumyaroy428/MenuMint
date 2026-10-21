@@ -1,6 +1,6 @@
-# Digital Menu & Ordering SaaS
+# MenuMint — Digital Menu & Ordering SaaS
 
-**Working name:** MenuMint (rename only if the existing project already has a chosen name)  
+**Application Name:** MenuMint  
 **Target customers:** Independent cafés and small restaurants  
 **Primary goal:** A mobile-first digital menu with QR access, customer ordering, and a simple restaurant dashboard.
 

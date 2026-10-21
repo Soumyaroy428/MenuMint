@@ -254,7 +254,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
             <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#ecfdf5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 0.75rem' }}>
               <Lock size={24} />
             </div>
-            <h2 style={{ fontSize: '1.35rem', fontWeight: 800 }}>Café Owner Portal</h2>
+            <h2 style={{ fontSize: '1.35rem', fontWeight: 800 }}>MenuMint Owner Portal</h2>
             <p style={{ color: '#64748b', fontSize: '0.875rem', marginTop: 4 }}>
               Sign in to manage incoming orders and menu items.
             </p>

@@ -21,7 +21,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
 
   if (!isOpen) return null;
 
-  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://menu-ordering-saas.vercel.app';
+  const currentOrigin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://menu-ordering-saas.vercel.app';
   const activeTable = isCustom ? customTable.trim() : tableSelection;
   
   const qrTargetUrl = activeTable

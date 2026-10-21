@@ -29,7 +29,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           title="Return to Menu"
         >
           <Coffee size={24} color="#059669" />
-          <span>{cafeName}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', lineHeight: 1.15 }}>
+            <span style={{ fontSize: '1.05rem', fontWeight: 800 }}>{cafeName}</span>
+            <span style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 700, letterSpacing: '0.04em' }}>
+              POWERED BY MENUMINT
+            </span>
+          </div>
         </button>
 
         <nav className="nav-links">

@@ -217,7 +217,7 @@ export function App() {
       <QRCodeModal
         isOpen={isQRModalOpen}
         onClose={() => setIsQRModalOpen(false)}
-        cafeName={cafe?.name || 'The Daily Grind Café'}
+        cafeName={cafe?.name || 'MenuMint'}
         cafeSlug={cafeSlug}
       />
     </div>
