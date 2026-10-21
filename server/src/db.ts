@@ -1,4 +1,4 @@
-import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus } from './types.js';
+import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary } from './types.js';
 import bcrypt from 'bcryptjs';
 
 // Pre-seeded database in memory with consistent IDs and tenant isolation
@@ -341,6 +341,63 @@ class Database {
     return this.orders
       .filter((o) => o.cafeId === cafeId)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  getAnalyticsByCafeId(cafeId: string): AnalyticsSummary {
+    const orders = this.getOrdersByCafeId(cafeId);
+    const nonCancelled = orders.filter((o) => o.status !== 'CANCELLED');
+    const totalRevenue = nonCancelled.reduce((sum, o) => sum + o.total, 0);
+    const completedOrders = orders.filter((o) => o.status === 'COMPLETED').length;
+    const activeOrders = orders.filter((o) => ['PENDING', 'ACCEPTED', 'PREPARING', 'READY'].includes(o.status)).length;
+    const dineInCount = orders.filter((o) => o.orderType === 'dine-in').length;
+    const takeawayCount = orders.filter((o) => o.orderType === 'takeaway').length;
+    const averageOrderValue = nonCancelled.length > 0 ? Math.round(totalRevenue / nonCancelled.length) : 0;
+
+    const statusDistribution: Record<OrderStatus, number> = {
+      PENDING: 0,
+      ACCEPTED: 0,
+      PREPARING: 0,
+      READY: 0,
+      COMPLETED: 0,
+      CANCELLED: 0,
+    };
+
+    orders.forEach((o) => {
+      if (statusDistribution[o.status] !== undefined) {
+        statusDistribution[o.status]++;
+      }
+    });
+
+    const itemMap = new Map<string, { id: string; name: string; quantitySold: number; revenue: number }>();
+    nonCancelled.forEach((o) => {
+      o.items.forEach((item) => {
+        const existing = itemMap.get(item.menuItemId) || {
+          id: item.menuItemId,
+          name: item.name,
+          quantitySold: 0,
+          revenue: 0,
+        };
+        existing.quantitySold += item.quantity;
+        existing.revenue += item.lineTotal;
+        itemMap.set(item.menuItemId, existing);
+      });
+    });
+
+    const topSellingItems = Array.from(itemMap.values())
+      .sort((a, b) => b.quantitySold - a.quantitySold)
+      .slice(0, 5);
+
+    return {
+      totalRevenue,
+      totalOrders: orders.length,
+      completedOrders,
+      activeOrders,
+      averageOrderValue,
+      dineInCount,
+      takeawayCount,
+      topSellingItems,
+      statusDistribution,
+    };
   }
 
   updateOrderStatus(orderId: string, status: OrderStatus): Order | undefined {

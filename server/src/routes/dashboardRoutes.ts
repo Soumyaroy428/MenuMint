@@ -264,3 +264,13 @@ dashboardRouter.delete('/items/:id', (req: AuthenticatedRequest, res: Response):
   });
 });
 
+// 8. Get business analytics & performance metrics (Strict Tenant Isolation)
+dashboardRouter.get('/analytics', (req: AuthenticatedRequest, res: Response): void => {
+  const cafeId = req.user!.cafeId;
+  const analytics = db.getAnalyticsByCafeId(cafeId);
+
+  res.json({
+    analytics,
+  });
+});
+

@@ -278,5 +278,49 @@ describe('MenuMint API Test Suite', () => {
     assert.strictEqual(deleteRes.status, 200);
     assert.strictEqual(deleteRes.body.success, true);
   });
+
+  // 11. CP-32: Dashboard Analytics & Business Metrics (Tenant Isolated)
+  test('GET /api/dashboard/analytics should reject unauthenticated request', async () => {
+    const res = await request(app).get('/api/dashboard/analytics');
+    assert.strictEqual(res.status, 401);
+  });
+
+  test('GET /api/dashboard/analytics should return business metrics with strict tenant isolation', async () => {
+    const res = await request(app)
+      .get('/api/dashboard/analytics')
+      .set('Authorization', `Bearer ${ownerToken}`);
+
+    assert.strictEqual(res.status, 200);
+    assert.ok(res.body.analytics);
+    const { analytics } = res.body;
+
+    assert.strictEqual(typeof analytics.totalRevenue, 'number');
+    assert.ok(analytics.totalRevenue > 0);
+    assert.strictEqual(typeof analytics.totalOrders, 'number');
+    assert.ok(analytics.totalOrders >= 2);
+    assert.strictEqual(typeof analytics.averageOrderValue, 'number');
+    assert.ok(Array.isArray(analytics.topSellingItems));
+    assert.ok(analytics.topSellingItems.length > 0);
+    assert.strictEqual(typeof analytics.dineInCount, 'number');
+    assert.strictEqual(typeof analytics.takeawayCount, 'number');
+    assert.ok(analytics.statusDistribution);
+
+    // Verify Cafe 2 has separate isolated analytics
+    const cafe2Login = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'owner@bellavista.com', password: 'password123' });
+    const cafe2Token = cafe2Login.body.token;
+
+    const cafe2Res = await request(app)
+      .get('/api/dashboard/analytics')
+      .set('Authorization', `Bearer ${cafe2Token}`);
+
+    assert.strictEqual(cafe2Res.status, 200);
+    assert.ok(cafe2Res.body.analytics);
+    // Cafe 2 total orders should reflect only Cafe 2
+    assert.strictEqual(cafe2Res.body.analytics.totalOrders, 1);
+    assert.strictEqual(cafe2Res.body.analytics.totalRevenue, 368);
+  });
 });
+
 

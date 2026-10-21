@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Order, MenuItem, MenuCategory, OrderStatus } from '../types';
+import { User, Order, MenuItem, MenuCategory, OrderStatus, AnalyticsSummary } from '../types';
 import {
   loginOwner,
   fetchDashboardOrders,
@@ -9,6 +9,7 @@ import {
   createMenuItem,
   updateMenuItem,
   deleteMenuItem,
+  fetchDashboardAnalytics,
 } from '../api';
 import {
   Lock,
@@ -31,6 +32,9 @@ import {
   X,
   Download,
   Search,
+  TrendingUp,
+  Award,
+  UtensilsCrossed,
 } from 'lucide-react';
 
 interface DashboardPageProps {
@@ -52,10 +56,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
   const [loginError, setLoginError] = useState<string | null>(null);
 
   // Dashboard content state
-  const [activeTab, setActiveTab] = useState<'orders' | 'menu'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'analytics'>('orders');
   const [orders, setOrders] = useState<Order[]>([]);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
   const [loadingData, setLoadingData] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [orderSearch, setOrderSearch] = useState<string>('');
@@ -118,9 +123,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
     if (!isPolling) setLoadingData(true);
     setActionError(null);
     try {
-      const [fetchedOrders, fetchedMenu] = await Promise.all([
+      const [fetchedOrders, fetchedMenu, fetchedAnalytics] = await Promise.all([
         fetchDashboardOrders(authToken),
         fetchDashboardMenu(authToken),
+        fetchDashboardAnalytics(authToken).catch(() => null),
       ]);
 
       if (isPolling && prevOrderCountRef.current > 0 && fetchedOrders.length > prevOrderCountRef.current) {
@@ -136,6 +142,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
       setOrders(fetchedOrders);
       setCategories(fetchedMenu.categories);
       setMenuItems(fetchedMenu.items);
+      if (fetchedAnalytics) {
+        setAnalytics(fetchedAnalytics);
+      }
     } catch (err: any) {
       if (!isPolling) setActionError(err.message || 'Failed to load dashboard data');
       if (err.message && err.message.includes('token')) {
@@ -581,6 +590,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
         >
           <Sliders size={16} /> Menu Management ({menuItems.length} items)
         </button>
+        <button
+          className={`btn btn-sm ${activeTab === 'analytics' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setActiveTab('analytics')}
+        >
+          <TrendingUp size={16} /> Insights & Analytics
+        </button>
       </div>
 
       {actionError && (
@@ -790,7 +805,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
             </div>
           )}
         </div>
-      ) : (
+      ) : activeTab === 'menu' ? (
         /* Menu Management */
         <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '1.25rem' }}>
@@ -873,6 +888,211 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
               );
             })}
           </div>
+        </div>
+      ) : (
+        /* Insights & Analytics View */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {/* Header */}
+          <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <TrendingUp size={22} color="#059669" />
+                <h2 style={{ fontSize: '1.3rem', fontWeight: 800 }}>Business Performance & Insights</h2>
+              </div>
+              <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: 2 }}>
+                Real-time calculated metrics scoped to <strong>{currentUser.cafeName}</strong>.
+              </p>
+            </div>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => token && loadDashboardData(token)}
+              title="Refresh Analytics"
+            >
+              <RefreshCw size={14} /> Refresh Insights
+            </button>
+          </div>
+
+          {analytics && (
+            <>
+              {/* Analytics Metric Cards Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#64748b', fontSize: '0.85rem' }}>
+                    <span>Gross Revenue</span>
+                    <DollarSign size={18} color="#059669" />
+                  </div>
+                  <div style={{ fontSize: '2rem', fontWeight: 800, color: '#059669', marginTop: '0.5rem' }}>
+                    {currentUser.currencySymbol}{(analytics.totalRevenue / 100).toFixed(2)}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>
+                    From {analytics.totalOrders} total recorded orders
+                  </div>
+                </div>
+
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#64748b', fontSize: '0.85rem' }}>
+                    <span>Average Order Value</span>
+                    <TrendingUp size={18} color="#0284c7" />
+                  </div>
+                  <div style={{ fontSize: '2rem', fontWeight: 800, color: '#0284c7', marginTop: '0.5rem' }}>
+                    {currentUser.currencySymbol}{(analytics.averageOrderValue / 100).toFixed(2)}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>
+                    Per active transaction
+                  </div>
+                </div>
+
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#64748b', fontSize: '0.85rem' }}>
+                    <span>Active vs Completed</span>
+                    <Package size={18} color="#d97706" />
+                  </div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0f172a', marginTop: '0.5rem' }}>
+                    {analytics.activeOrders} <span style={{ fontSize: '0.95rem', color: '#64748b', fontWeight: 500 }}>active / {analytics.completedOrders} completed</span>
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>
+                    Kitchen fulfillment load
+                  </div>
+                </div>
+
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#64748b', fontSize: '0.85rem' }}>
+                    <span>Fulfillment Split</span>
+                    <UtensilsCrossed size={18} color="#8b5cf6" />
+                  </div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', marginTop: '0.5rem' }}>
+                    {analytics.dineInCount} Dine-In / {analytics.takeawayCount} To-Go
+                  </div>
+                  <div style={{ width: '100%', height: 6, background: '#e2e8f0', borderRadius: 3, marginTop: '0.5rem', overflow: 'hidden', display: 'flex' }}>
+                    <div
+                      style={{
+                        width: `${analytics.totalOrders > 0 ? (analytics.dineInCount / analytics.totalOrders) * 100 : 50}%`,
+                        background: '#059669',
+                      }}
+                      title="Dine In %"
+                    />
+                    <div
+                      style={{
+                        width: `${analytics.totalOrders > 0 ? (analytics.takeawayCount / analytics.totalOrders) * 100 : 50}%`,
+                        background: '#3b82f6',
+                      }}
+                      title="Takeaway %"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Two Column Section: Top Selling Items + Status Pipeline */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
+                {/* Top Selling Items */}
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                    <Award size={18} color="#f59e0b" />
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Top-Selling Menu Items</h3>
+                  </div>
+
+                  {analytics.topSellingItems.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#94a3b8' }}>
+                      No sales recorded yet.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                      {analytics.topSellingItems.map((item, idx) => (
+                        <div
+                          key={item.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '0.65rem 0.85rem',
+                            background: '#f8fafc',
+                            borderRadius: 8,
+                            border: '1px solid #e2e8f0',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <div
+                              style={{
+                                width: 26,
+                                height: 26,
+                                borderRadius: '50%',
+                                background: idx === 0 ? '#fef3c7' : '#e2e8f0',
+                                color: idx === 0 ? '#b45309' : '#475569',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 800,
+                                fontSize: '0.75rem',
+                              }}
+                            >
+                              #{idx + 1}
+                            </div>
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{item.name}</div>
+                              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                                {item.quantitySold} {item.quantitySold === 1 ? 'unit sold' : 'units sold'}
+                              </div>
+                            </div>
+                          </div>
+                          <strong style={{ color: '#059669', fontSize: '0.95rem' }}>
+                            {currentUser.currencySymbol}{(item.revenue / 100).toFixed(2)}
+                          </strong>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Pipeline Status Breakdown */}
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                    <Clock size={18} color="#059669" />
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Order Pipeline Status</h3>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem' }}>
+                    {Object.entries(analytics.statusDistribution).map(([statusKey, count]) => {
+                      const isPending = statusKey === 'PENDING';
+                      const isPreparing = statusKey === 'PREPARING';
+                      const isReady = statusKey === 'READY';
+                      const isCompleted = statusKey === 'COMPLETED';
+                      const isCancelled = statusKey === 'CANCELLED';
+
+                      return (
+                        <div
+                          key={statusKey}
+                          style={{
+                            background: '#f8fafc',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: 8,
+                            padding: '0.75rem 1rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b' }}>
+                              {statusKey}
+                            </div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 800, color: isPending ? '#d97706' : isPreparing ? '#0284c7' : isReady ? '#16a34a' : isCompleted ? '#059669' : isCancelled ? '#ef4444' : '#334155' }}>
+                              {count}
+                            </div>
+                          </div>
+                          <span
+                            className={`badge ${isCompleted || isReady ? 'badge-success' : isCancelled ? 'badge-error' : 'badge-warning'}`}
+                            style={{ fontSize: '0.65rem' }}
+                          >
+                            {statusKey}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 

@@ -1,17 +1,19 @@
 import React from 'react';
 import { Order } from '../types';
-import { CheckCircle2, Clock, MapPin, Receipt, X } from 'lucide-react';
+import { CheckCircle2, Clock, MapPin, Receipt, X, Activity } from 'lucide-react';
 
 interface OrderConfirmationModalProps {
   order: Order | null;
   onClose: () => void;
   currencySymbol: string;
+  onTrackOrder?: (orderRef: string) => void;
 }
 
 export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
   order,
   onClose,
   currencySymbol,
+  onTrackOrder,
 }) => {
   if (!order) return null;
 
@@ -108,9 +110,21 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
           </div>
         </div>
 
-        <button className="btn btn-primary" onClick={onClose} style={{ width: '100%' }}>
-          Done / Back to Menu
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+          {onTrackOrder && (
+            <button
+              className="btn btn-primary"
+              onClick={() => onTrackOrder(order.orderRef)}
+              style={{ width: '100%', justifyContent: 'center', padding: '0.75rem' }}
+            >
+              <Activity size={18} />
+              <span>Track Live Order Status</span>
+            </button>
+          )}
+          <button className="btn btn-secondary" onClick={onClose} style={{ width: '100%', justifyContent: 'center' }}>
+            Done / Back to Menu
+          </button>
+        </div>
       </div>
     </div>
   );

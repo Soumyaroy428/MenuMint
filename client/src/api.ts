@@ -1,4 +1,4 @@
-import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus } from './types';
+import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary } from './types';
 
 const API_BASE = '/api';
 
@@ -175,5 +175,18 @@ export async function deleteMenuItem(token: string, itemId: string): Promise<voi
     throw new Error(data.message || 'Failed to delete menu item');
   }
 }
+
+export async function fetchDashboardAnalytics(token: string): Promise<AnalyticsSummary> {
+  const res = await fetch(`${API_BASE}/dashboard/analytics`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to fetch analytics');
+  }
+  const data = await res.json();
+  return data.analytics;
+}
+
 
 

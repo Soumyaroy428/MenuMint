@@ -77,3 +77,22 @@ export interface User {
   currencySymbol: string;
 }
 
+export interface TopSellingItem {
+  id: string;
+  name: string;
+  quantitySold: number;
+  revenue: number;
+}
+
+export interface AnalyticsSummary {
+  totalRevenue: number;
+  totalOrders: number;
+  completedOrders: number;
+  activeOrders: number;
+  averageOrderValue: number;
+  dineInCount: number;
+  takeawayCount: number;
+  topSellingItems: TopSellingItem[];
+  statusDistribution: Record<OrderStatus, number>;
+}
+

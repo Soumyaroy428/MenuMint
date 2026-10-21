@@ -42,6 +42,7 @@ export function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
   const [isTrackModalOpen, setIsTrackModalOpen] = useState(false);
+  const [trackingOrderRef, setTrackingOrderRef] = useState<string>('');
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
 
   useEffect(() => {
@@ -130,7 +131,10 @@ export function App() {
         setCurrentTab={setCurrentTab}
         cartItemCount={totalCartCount}
         openCart={() => setIsCartOpen(true)}
-        openTrackModal={() => setIsTrackModalOpen(true)}
+        openTrackModal={() => {
+          setTrackingOrderRef('');
+          setIsTrackModalOpen(true);
+        }}
         openQRModal={() => setIsQRModalOpen(true)}
         cafeName={cafe?.name || 'MenuMint'}
         availableCafes={availableCafes}
@@ -226,12 +230,22 @@ export function App() {
         order={confirmedOrder}
         onClose={() => setConfirmedOrder(null)}
         currencySymbol={cafe?.currencySymbol || '$'}
+        onTrackOrder={(orderRef) => {
+          setConfirmedOrder(null);
+          setTrackingOrderRef(orderRef);
+          setIsTrackModalOpen(true);
+        }}
       />
 
       {/* Order Tracking Modal */}
       <TrackOrderModal
         isOpen={isTrackModalOpen}
-        onClose={() => setIsTrackModalOpen(false)}
+        onClose={() => {
+          setIsTrackModalOpen(false);
+          setTrackingOrderRef('');
+        }}
+        initialOrderRef={trackingOrderRef}
+        currencySymbol={cafe?.currencySymbol || '$'}
       />
 
       {/* Table QR Code Modal */}
