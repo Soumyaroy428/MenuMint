@@ -29,6 +29,8 @@ import {
   Pencil,
   Trash2,
   X,
+  Download,
+  Search,
 } from 'lucide-react';
 
 interface DashboardPageProps {
@@ -56,6 +58,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loadingData, setLoadingData] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [orderSearch, setOrderSearch] = useState<string>('');
   const [actionError, setActionError] = useState<string | null>(null);
 
   // Auto-refresh & Audio notifications
@@ -379,9 +382,33 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
           </form>
 
           <div style={{ borderTop: '1px solid #f1f5f9', marginTop: '1.25rem', paddingTop: '1rem', textAlign: 'center' }}>
-            <p style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.5rem' }}>
-              Demo Credentials Pre-filled: <code>owner@dailygrind.com</code> / <code>password123</code>
+            <p style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.4rem' }}>
+              Quick Demo Accounts:
             </p>
+            <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center', marginBottom: '0.75rem' }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ fontSize: '0.72rem' }}
+                onClick={() => {
+                  setEmail('owner@dailygrind.com');
+                  setPassword('password123');
+                }}
+              >
+                ☕ The Daily Grind
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ fontSize: '0.72rem' }}
+                onClick={() => {
+                  setEmail('owner@bellavista.com');
+                  setPassword('password123');
+                }}
+              >
+                🍕 Bella Vista Bistro
+              </button>
+            </div>
             <button className="btn btn-secondary btn-sm" onClick={onBackToMenu}>
               ← Return to Public Menu
             </button>
@@ -391,10 +418,48 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
     );
   }
 
-  // Filter orders
+  const handleExportCSV = () => {
+    if (orders.length === 0) {
+      alert('No orders to export.');
+      return;
+    }
+    const headers = ['Order Ref', 'Date', 'Time', 'Customer', 'Type', 'Table/Phone', 'Status', 'Items', 'Subtotal', 'Tax', 'Total'];
+    const rows = orders.map((o) => [
+      o.orderRef,
+      new Date(o.createdAt).toLocaleDateString(),
+      new Date(o.createdAt).toLocaleTimeString(),
+      `"${o.customerName.replace(/"/g, '""')}"`,
+      o.orderType,
+      `"${(o.tableNumber || o.customerPhone || '').replace(/"/g, '""')}"`,
+      o.status,
+      `"${o.items.map((i) => `${i.quantity}x ${i.name}`).join('; ')}"`,
+      (o.subtotal / 100).toFixed(2),
+      (o.tax / 100).toFixed(2),
+      (o.total / 100).toFixed(2),
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `menumint-${currentUser?.cafeSlug || 'orders'}-${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Filter orders with status and search term
   const filteredOrders = orders.filter((o) => {
-    if (statusFilter === 'all') return true;
-    return o.status === statusFilter;
+    const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
+    const q = orderSearch.toLowerCase().trim();
+    const matchesSearch =
+      !q ||
+      o.orderRef.toLowerCase().includes(q) ||
+      o.customerName.toLowerCase().includes(q) ||
+      (o.tableNumber && o.tableNumber.toLowerCase().includes(q)) ||
+      (o.customerPhone && o.customerPhone.toLowerCase().includes(q));
+    return matchesStatus && matchesSearch;
   });
 
   const totalRevenue = orders
@@ -531,6 +596,29 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
         </div>
       ) : activeTab === 'orders' ? (
         <div>
+          {/* Order Search & Export Toolbar */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '1rem' }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: 220, maxWidth: 360 }}>
+              <Search size={15} color="#94a3b8" style={{ position: 'absolute', left: 10, top: 11 }} />
+              <input
+                type="text"
+                className="form-input"
+                style={{ paddingLeft: '2.2rem', paddingRight: '0.75rem', height: 36, fontSize: '0.85rem' }}
+                placeholder="Search customer, ref, or table..."
+                value={orderSearch}
+                onChange={(e) => setOrderSearch(e.target.value)}
+              />
+            </div>
+
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={handleExportCSV}
+              title="Download Orders CSV for Bookkeeping"
+            >
+              <Download size={14} /> Export CSV
+            </button>
+          </div>
+
           {/* Status Filters */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '1.25rem' }}>
             {['all', 'PENDING', 'ACCEPTED', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED'].map((st) => (

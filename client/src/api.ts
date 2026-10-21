@@ -2,6 +2,15 @@ import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus } from './types'
 
 const API_BASE = '/api';
 
+export async function fetchCafes(): Promise<Cafe[]> {
+  const res = await fetch(`${API_BASE}/cafes`);
+  if (!res.ok) {
+    throw new Error('Failed to load café directory');
+  }
+  const data = await res.json();
+  return data.cafes;
+}
+
 export async function fetchMenu(slug: string): Promise<{ cafe: Cafe; categories: MenuCategory[]; items: MenuItem[] }> {
   const res = await fetch(`${API_BASE}/cafes/${slug}/menu`);
   if (!res.ok) {

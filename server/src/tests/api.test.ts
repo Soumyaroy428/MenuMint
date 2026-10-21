@@ -14,6 +14,17 @@ describe('MenuMint API Test Suite', () => {
     assert.strictEqual(res.body.status, 'ok');
   });
 
+  test('GET /api/cafes should return list of active cafés', async () => {
+    const res = await request(app).get('/api/cafes');
+    assert.strictEqual(res.status, 200);
+    assert.ok(Array.isArray(res.body.cafes));
+    assert.ok(res.body.cafes.length >= 2);
+    const dailyGrind = res.body.cafes.find((c: any) => c.slug === 'daily-grind');
+    assert.ok(dailyGrind);
+    const bellaVista = res.body.cafes.find((c: any) => c.slug === 'bella-vista');
+    assert.ok(bellaVista);
+  });
+
   // 2. CP-09: Public café & menu
   test('GET /api/cafes/daily-grind/menu should return café info, categories, and items', async () => {
     const res = await request(app).get('/api/cafes/daily-grind/menu');

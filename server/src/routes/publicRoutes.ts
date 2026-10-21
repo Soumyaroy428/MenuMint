@@ -4,6 +4,22 @@ import { OrderItemSnapshot, OrderType } from '../types.js';
 
 export const publicRouter = Router();
 
+// 0. Get all public cafés
+publicRouter.get('/cafes', (_req: Request, res: Response): void => {
+  const cafes = db.cafes.map((c) => ({
+    id: c.id,
+    name: c.name,
+    slug: c.slug,
+    description: c.description,
+    address: c.address,
+    phone: c.phone,
+    currency: c.currency,
+    currencySymbol: c.currencySymbol,
+    isOpen: c.isOpen,
+  }));
+  res.json({ cafes });
+});
+
 // 1. Get café details by slug
 publicRouter.get('/cafes/:slug', (req: Request, res: Response): void => {
   const { slug } = req.params;

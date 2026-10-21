@@ -1,5 +1,6 @@
 import React from 'react';
-import { Coffee, ShoppingBag, Search, LayoutDashboard, QrCode } from 'lucide-react';
+import { Coffee, ShoppingBag, Search, LayoutDashboard, QrCode, Store } from 'lucide-react';
+import { Cafe } from '../types';
 
 interface NavbarProps {
   currentTab: 'menu' | 'dashboard';
@@ -9,6 +10,9 @@ interface NavbarProps {
   openTrackModal: () => void;
   openQRModal: () => void;
   cafeName?: string;
+  availableCafes?: Cafe[];
+  activeCafeSlug?: string;
+  onSelectCafe?: (slug: string) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -19,6 +23,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   openTrackModal,
   openQRModal,
   cafeName = 'MenuMint',
+  availableCafes = [],
+  activeCafeSlug = 'daily-grind',
+  onSelectCafe,
 }) => {
   return (
     <header className="navbar">
@@ -38,6 +45,35 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
 
         <nav className="nav-links">
+          {/* Quick Café Switcher Dropdown */}
+          {availableCafes.length > 1 && currentTab === 'menu' && onSelectCafe && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <Store size={14} color="#059669" />
+              <select
+                aria-label="Switch Café"
+                value={activeCafeSlug}
+                onChange={(e) => onSelectCafe(e.target.value)}
+                style={{
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  padding: '0.3rem 0.5rem',
+                  borderRadius: 6,
+                  border: '1px solid #a7f3d0',
+                  background: '#ecfdf5',
+                  color: '#065f46',
+                  cursor: 'pointer',
+                  outline: 'none',
+                }}
+              >
+                {availableCafes.map((c) => (
+                  <option key={c.slug} value={c.slug}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <button
             className={`nav-link ${currentTab === 'menu' ? 'active' : ''}`}
             onClick={() => setCurrentTab('menu')}

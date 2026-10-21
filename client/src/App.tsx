@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Cafe, MenuCategory, MenuItem, CartItem, Order } from './types';
-import { fetchMenu } from './api';
+import { fetchMenu, fetchCafes } from './api';
 import { Navbar } from './components/Navbar';
 import { MenuPage } from './components/MenuPage';
 import { CartDrawer } from './components/CartDrawer';
@@ -14,7 +14,7 @@ export function App() {
   const [currentTab, setCurrentTab] = useState<'menu' | 'dashboard'>('menu');
 
   // Parse URL query parameters if opened via QR code or direct link
-  const [cafeSlug] = useState<string>(() => {
+  const [cafeSlug, setCafeSlug] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       return params.get('cafe') || 'daily-grind';
@@ -30,6 +30,7 @@ export function App() {
     return '';
   });
 
+  const [availableCafes, setAvailableCafes] = useState<Cafe[]>([]);
   const [cafe, setCafe] = useState<Cafe | null>(null);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -44,8 +45,25 @@ export function App() {
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
 
   useEffect(() => {
+    fetchCafes()
+      .then((cafes) => setAvailableCafes(cafes))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     loadMenu();
   }, [cafeSlug]);
+
+  const handleSelectCafe = (slug: string) => {
+    if (slug === cafeSlug) return;
+    setCafeSlug(slug);
+    setCart([]);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('cafe', slug);
+      window.history.pushState({}, '', url.toString());
+    }
+  };
 
   const loadMenu = async () => {
     setLoading(true);
@@ -115,6 +133,9 @@ export function App() {
         openTrackModal={() => setIsTrackModalOpen(true)}
         openQRModal={() => setIsQRModalOpen(true)}
         cafeName={cafe?.name || 'MenuMint'}
+        availableCafes={availableCafes}
+        activeCafeSlug={cafeSlug}
+        onSelectCafe={handleSelectCafe}
       />
 
       <main style={{ flex: 1 }}>
