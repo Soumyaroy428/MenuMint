@@ -378,6 +378,7 @@ class Database {
     const orders = this.getOrdersByCafeId(cafeId);
     const nonCancelled = orders.filter((o) => o.status !== 'CANCELLED');
     const totalRevenue = nonCancelled.reduce((sum, o) => sum + o.total, 0);
+    const totalTips = nonCancelled.reduce((sum, o) => sum + (o.tip || 0), 0);
     const completedOrders = orders.filter((o) => o.status === 'COMPLETED').length;
     const activeOrders = orders.filter((o) => ['PENDING', 'ACCEPTED', 'PREPARING', 'READY'].includes(o.status)).length;
     const dineInCount = orders.filter((o) => o.orderType === 'dine-in').length;
@@ -420,6 +421,7 @@ class Database {
 
     return {
       totalRevenue,
+      totalTips,
       totalOrders: orders.length,
       completedOrders,
       activeOrders,

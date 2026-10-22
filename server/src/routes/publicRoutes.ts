@@ -83,7 +83,7 @@ publicRouter.get('/cafes/:slug/menu', (req: Request, res: Response): void => {
 
 // 3. Submit an order (Server-authoritative calculation and validation)
 publicRouter.post('/orders', (req: Request, res: Response): void => {
-  const { cafeSlug, cafeId, orderType, customerName, customerPhone, tableNumber, notes, items, promoCode } = req.body;
+  const { cafeSlug, cafeId, orderType, customerName, customerPhone, tableNumber, notes, items, promoCode, tip } = req.body;
 
   // Resolve café
   const cafe = cafeSlug ? db.getCafeBySlug(cafeSlug) : db.getCafeById(cafeId);
@@ -228,10 +228,24 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
     appliedPromoCode = promo.code;
   }
 
+  // Validate tip (gratuity) if provided
+  let calculatedTip = 0;
+  if (tip !== undefined && tip !== null && tip !== '') {
+    const numericTip = Number(tip);
+    if (!Number.isInteger(numericTip) || numericTip < 0 || numericTip > 100000) {
+      res.status(400).json({
+        error: 'Validation Error',
+        message: 'Tip amount must be a non-negative integer in cents (max $1,000.00).',
+      });
+      return;
+    }
+    calculatedTip = numericTip;
+  }
+
   // Calculate tax (5% flat demo tax) on post-discount subtotal
   const discountedSubtotal = Math.max(0, calculatedSubtotal - discountAmount);
   const calculatedTax = Math.round(discountedSubtotal * 0.05);
-  const calculatedTotal = discountedSubtotal + calculatedTax;
+  const calculatedTotal = discountedSubtotal + calculatedTax + calculatedTip;
 
   // Persist order
   const newOrder = db.createOrder({
@@ -246,6 +260,7 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
     subtotal: calculatedSubtotal,
     discount: discountAmount > 0 ? discountAmount : undefined,
     promoCode: appliedPromoCode,
+    tip: calculatedTip > 0 ? calculatedTip : undefined,
     tax: calculatedTax,
     total: calculatedTotal,
   });
@@ -265,6 +280,7 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
       subtotal: newOrder.subtotal,
       discount: newOrder.discount,
       promoCode: newOrder.promoCode,
+      tip: newOrder.tip,
       tax: newOrder.tax,
       total: newOrder.total,
       currency: cafe.currency,
@@ -303,6 +319,7 @@ publicRouter.get('/orders/:orderRef', (req: Request, res: Response): void => {
       subtotal: order.subtotal,
       discount: order.discount,
       promoCode: order.promoCode,
+      tip: order.tip,
       tax: order.tax,
       total: order.total,
       createdAt: order.createdAt,

@@ -411,6 +411,54 @@ describe('MenuMint API Test Suite', () => {
 
     assert.strictEqual(deleteRes.status, 200);
   });
+
+  // 13. CP-34: Customer Tipping & Staff Gratuity Engine
+  test('POST /api/orders should reject negative tip or non-integer tip', async () => {
+    const res = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        customerName: 'Negative Tipper',
+        orderType: 'takeaway',
+        tip: -50,
+        items: [{ menuItemId: 'item-1', quantity: 1 }],
+      });
+
+    assert.strictEqual(res.status, 400);
+    assert.strictEqual(res.body.error, 'Validation Error');
+  });
+
+  test('POST /api/orders should calculate total with tip and persist tip snapshot', async () => {
+    // 1x item-1 (495). subtotal = 495.
+    // 5% tax = Math.round(495 * 0.05) = 25.
+    // Tip = 150 ($1.50).
+    // Total = 495 + 25 + 150 = 670.
+    const res = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        customerName: 'Generous Tipper',
+        orderType: 'dine-in',
+        tip: 150,
+        items: [{ menuItemId: 'item-1', quantity: 1 }],
+      });
+
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.order.subtotal, 495);
+    assert.strictEqual(res.body.order.tax, 25);
+    assert.strictEqual(res.body.order.tip, 150);
+    assert.strictEqual(res.body.order.total, 670);
+
+    // Verify analytics reflects tip
+    const analyticsRes = await request(app)
+      .get('/api/dashboard/analytics')
+      .set('Authorization', `Bearer ${ownerToken}`);
+
+    assert.strictEqual(analyticsRes.status, 200);
+    assert.strictEqual(typeof analyticsRes.body.analytics.totalTips, 'number');
+    assert.ok(analyticsRes.body.analytics.totalTips >= 150);
+  });
 });
+
 
 

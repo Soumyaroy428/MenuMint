@@ -62,6 +62,7 @@ export interface Order {
   subtotal: number;
   discount?: number; // in cents
   promoCode?: string;
+  tip?: number; // in cents (gratuity)
   tax: number;
   total: number;
   createdAt: string;
@@ -101,6 +102,7 @@ export interface TopSellingItem {
 
 export interface AnalyticsSummary {
   totalRevenue: number;
+  totalTips: number;
   totalOrders: number;
   completedOrders: number;
   activeOrders: number;

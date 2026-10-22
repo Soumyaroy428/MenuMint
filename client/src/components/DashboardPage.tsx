@@ -40,6 +40,7 @@ import {
   Award,
   UtensilsCrossed,
   Tag,
+  Heart,
 } from 'lucide-react';
 
 interface DashboardPageProps {
@@ -409,6 +410,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
               <span>-${currentUser?.currencySymbol || '$'}${(ord.discount / 100).toFixed(2)}</span>
             </div>
           ` : ''}
+          ${ord.tip && ord.tip > 0 ? `
+            <div class="item-row" style="color: #059669;">
+              <span>STAFF TIP:</span>
+              <span>+${currentUser?.currencySymbol || '$'}${(ord.tip / 100).toFixed(2)}</span>
+            </div>
+          ` : ''}
           <div class="dashed"></div>
           <div class="item-row bold" style="font-size: 15px">
             <span>TOTAL:</span>
@@ -518,7 +525,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
       alert('No orders to export.');
       return;
     }
-    const headers = ['Order Ref', 'Date', 'Time', 'Customer', 'Type', 'Table/Phone', 'Status', 'Items', 'Subtotal', 'Promo Code', 'Discount', 'Tax', 'Total'];
+    const headers = ['Order Ref', 'Date', 'Time', 'Customer', 'Type', 'Table/Phone', 'Status', 'Items', 'Subtotal', 'Promo Code', 'Discount', 'Tip', 'Tax', 'Total'];
     const rows = orders.map((o) => [
       o.orderRef,
       new Date(o.createdAt).toLocaleDateString(),
@@ -531,6 +538,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
       (o.subtotal / 100).toFixed(2),
       o.promoCode || 'NONE',
       o.discount ? (o.discount / 100).toFixed(2) : '0.00',
+      o.tip ? (o.tip / 100).toFixed(2) : '0.00',
       (o.tax / 100).toFixed(2),
       (o.total / 100).toFixed(2),
     ]);
@@ -815,6 +823,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: '#059669', fontSize: '0.8rem', fontWeight: 600, padding: '0.2rem 0' }}>
                         <span>Promo Discount ({ord.promoCode || 'PROMO'})</span>
                         <span>-{currentUser.currencySymbol}{(ord.discount / 100).toFixed(2)}</span>
+                      </div>
+                    ) : null}
+
+                    {ord.tip && ord.tip > 0 ? (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#059669', fontSize: '0.8rem', fontWeight: 600, padding: '0.2rem 0' }}>
+                        <span>Staff Tip (Gratuity)</span>
+                        <span>+{currentUser.currencySymbol}{(ord.tip / 100).toFixed(2)}</span>
                       </div>
                     ) : null}
 
@@ -1176,6 +1191,19 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
                       }}
                       title="Takeaway %"
                     />
+                  </div>
+                </div>
+
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#64748b', fontSize: '0.85rem' }}>
+                    <span>Staff Tips Collected</span>
+                    <Heart size={18} color="#ec4899" fill="#fbcfe8" />
+                  </div>
+                  <div style={{ fontSize: '2rem', fontWeight: 800, color: '#ec4899', marginTop: '0.5rem' }}>
+                    {currentUser.currencySymbol}{((analytics.totalTips || 0) / 100).toFixed(2)}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>
+                    Total barista & kitchen gratuity
                   </div>
                 </div>
               </div>

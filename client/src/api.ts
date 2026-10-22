@@ -28,6 +28,7 @@ export async function submitOrder(orderData: {
   tableNumber?: string;
   notes?: string;
   promoCode?: string;
+  tip?: number;
   items: { menuItemId: string; quantity: number }[];
 }): Promise<{ success: boolean; order: Order; message: string }> {
   const res = await fetch(`${API_BASE}/orders`, {

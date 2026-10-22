@@ -109,6 +109,13 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
             </div>
           ) : null}
 
+          {order.tip && order.tip > 0 ? (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.35rem', color: '#059669', fontSize: '0.85rem', fontWeight: 600 }}>
+              <span>Staff Tip (Gratuity)</span>
+              <span>+ {currencySymbol}{(order.tip / 100).toFixed(2)}</span>
+            </div>
+          ) : null}
+
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem', fontWeight: 800, fontSize: '1.05rem' }}>
             <span>Total Confirmed</span>
             <span style={{ color: '#059669' }}>

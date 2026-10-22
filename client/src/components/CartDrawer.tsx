@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { CartItem, OrderType, Order } from '../types';
-import { X, Trash2, Plus, Minus, ShoppingBag, Info, AlertTriangle, ArrowRight, Tag } from 'lucide-react';
+import { X, Trash2, Plus, Minus, ShoppingBag, Info, AlertTriangle, ArrowRight, Tag, Heart } from 'lucide-react';
 import { submitOrder, validatePromoCode } from '../api';
 
 interface CartDrawerProps {
@@ -46,13 +46,32 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [promoValidating, setPromoValidating] = useState(false);
   const [promoError, setPromoError] = useState<string | null>(null);
 
+  // Tip / Gratuity State
+  const [tipType, setTipType] = useState<'none' | '10' | '15' | '20' | 'custom'>('none');
+  const [customTipInput, setCustomTipInput] = useState('');
+
   if (!isOpen) return null;
 
   const rawSubtotal = items.reduce((acc, ci) => acc + ci.item.price * ci.quantity, 0);
   const discountAmount = appliedPromo ? Math.min(rawSubtotal, appliedPromo.discountAmount) : 0;
   const subtotal = Math.max(0, rawSubtotal - discountAmount);
   const estimatedTax = Math.round(subtotal * 0.05);
-  const total = subtotal + estimatedTax;
+
+  let tipAmount = 0;
+  if (tipType === '10') {
+    tipAmount = Math.round(subtotal * 0.10);
+  } else if (tipType === '15') {
+    tipAmount = Math.round(subtotal * 0.15);
+  } else if (tipType === '20') {
+    tipAmount = Math.round(subtotal * 0.20);
+  } else if (tipType === 'custom') {
+    const parsed = Number(customTipInput);
+    if (!isNaN(parsed) && parsed > 0) {
+      tipAmount = Math.round(parsed * 100);
+    }
+  }
+
+  const total = subtotal + estimatedTax + tipAmount;
 
   const handleApplyPromo = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,6 +124,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         tableNumber: orderType === 'dine-in' ? tableNumber.trim() : undefined,
         notes: notes.trim() || undefined,
         promoCode: appliedPromo ? appliedPromo.code : undefined,
+        tip: tipAmount > 0 ? tipAmount : undefined,
         items: items.map((ci) => ({
           menuItemId: ci.item.id,
           quantity: ci.quantity,
@@ -325,6 +345,63 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               )}
             </div>
 
+            {/* Staff Gratuity / Tip Selector */}
+            <div style={{ marginBottom: '1rem', background: '#f8fafc', padding: '0.75rem', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
+                  <Heart size={14} color="#ec4899" fill="#fbcfe8" />
+                  <span>Tip Barista & Kitchen Staff</span>
+                </div>
+                {tipAmount > 0 && (
+                  <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#059669' }}>
+                    +{currencySymbol}{(tipAmount / 100).toFixed(2)}
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.35rem' }}>
+                {[
+                  { id: 'none', label: 'None' },
+                  { id: '10', label: '10%' },
+                  { id: '15', label: '15%' },
+                  { id: '20', label: '20%' },
+                  { id: 'custom', label: 'Custom' },
+                ].map((btn) => (
+                  <button
+                    key={btn.id}
+                    type="button"
+                    onClick={() => setTipType(btn.id as any)}
+                    className={`btn btn-sm ${tipType === btn.id ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{
+                      flex: 1,
+                      padding: '0.35rem 0',
+                      fontSize: '0.75rem',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {btn.label}
+                  </button>
+                ))}
+              </div>
+
+              {tipType === 'custom' && (
+                <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#64748b' }}>{currencySymbol}</span>
+                  <input
+                    type="number"
+                    step="0.50"
+                    min="0.50"
+                    max="500.00"
+                    placeholder="Custom tip (e.g. 3.00)"
+                    className="form-input"
+                    style={{ height: 32, fontSize: '0.8rem' }}
+                    value={customTipInput}
+                    onChange={(e) => setCustomTipInput(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+
             {/* Price Breakdown */}
             <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '0.75rem', marginBottom: '0.75rem', fontSize: '0.85rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', marginBottom: 2 }}>
@@ -341,6 +418,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 <span>Estimated Tax (5%)</span>
                 <span>{currencySymbol}{(estimatedTax / 100).toFixed(2)}</span>
               </div>
+              {tipAmount > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#059669', fontWeight: 600, marginBottom: 4 }}>
+                  <span>Staff Tip</span>
+                  <span>+{currencySymbol}{(tipAmount / 100).toFixed(2)}</span>
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '1.05rem', color: '#0f172a' }}>
                 <span>Total Due</span>
                 <span>{currencySymbol}{(total / 100).toFixed(2)}</span>

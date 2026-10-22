@@ -6,7 +6,7 @@
   "description": "MenuMint — Digital Menu & Ordering SaaS for Cafés and Restaurants",
   "scripts": {
     "install:all": "npm install --prefix client && npm install --prefix server",
-    "build:client": "npm run build --prefix client",
+    "build:client": "node client/node_modules/typescript/bin/tsc -p client/tsconfig.json && node client/node_modules/vite/bin/vite.js build client",
     "build:server": "node server/node_modules/typescript/bin/tsc -p server/tsconfig.json",
     "build": "npm run install:all && npm run build:client && npm run build:server",
     "start": "node server/dist/index.js",
