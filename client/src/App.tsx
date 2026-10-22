@@ -219,6 +219,8 @@ export function App() {
         currencySymbol={cafe?.currencySymbol || '$'}
         cafeSlug={cafeSlug}
         defaultTable={tableParam}
+        isStoreOpen={cafe?.isOpen ?? true}
+        storePauseReason={cafe?.pauseReason}
         onOrderSuccess={(order) => {
           setConfirmedOrder(order);
           loadMenu();

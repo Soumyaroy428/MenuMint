@@ -13,6 +13,8 @@ interface CartDrawerProps {
   currencySymbol: string;
   cafeSlug: string;
   defaultTable?: string;
+  isStoreOpen?: boolean;
+  storePauseReason?: string;
   onOrderSuccess: (order: Order) => void;
 }
 
@@ -26,6 +28,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   currencySymbol,
   cafeSlug,
   defaultTable,
+  isStoreOpen = true,
+  storePauseReason,
   onOrderSuccess,
 }) => {
   const [orderType, setOrderType] = useState<OrderType>('dine-in');
@@ -106,6 +110,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
     if (!customerName.trim()) {
       setErrorMessage('Please provide your name for the order.');
+      return;
+    }
+
+    if (!isStoreOpen) {
+      setErrorMessage(storePauseReason || 'This café is currently taking a short pause for incoming orders.');
       return;
     }
 
@@ -430,14 +439,43 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               </div>
             </div>
 
+            {/* Store Paused Banner */}
+            {!isStoreOpen && (
+              <div
+                style={{
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: 8,
+                  padding: '0.6rem 0.75rem',
+                  marginBottom: '0.75rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  color: '#991b1b',
+                  fontSize: '0.8rem',
+                }}
+              >
+                <AlertTriangle size={16} color="#dc2626" style={{ flexShrink: 0 }} />
+                <span>{storePauseReason || 'Kitchen ordering is currently paused.'}</span>
+              </div>
+            )}
+
             {/* Submit Button */}
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={submitting}
-              style={{ width: '100%', padding: '0.75rem', fontSize: '1rem' }}
+              disabled={submitting || !isStoreOpen}
+              style={{
+                width: '100%',
+                padding: '0.75rem',
+                fontSize: '1rem',
+                opacity: !isStoreOpen ? 0.6 : 1,
+                cursor: !isStoreOpen ? 'not-allowed' : 'pointer',
+              }}
             >
-              {submitting ? (
+              {!isStoreOpen ? (
+                'Store Ordering Paused'
+              ) : submitting ? (
                 'Transmitting Order to Kitchen...'
               ) : (
                 <>

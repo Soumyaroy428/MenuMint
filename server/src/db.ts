@@ -297,6 +297,16 @@ class Database {
     return this.cafes.find((c) => c.id === id);
   }
 
+  updateCafeStatus(cafeId: string, isOpen: boolean, pauseReason?: string): Cafe | undefined {
+    const cafe = this.cafes.find((c) => c.id === cafeId);
+    if (cafe) {
+      cafe.isOpen = isOpen;
+      cafe.pauseReason = isOpen ? undefined : (pauseReason?.trim() || 'Kitchen ordering is temporarily paused.');
+      return cafe;
+    }
+    return undefined;
+  }
+
   getCategoriesByCafeId(cafeId: string): MenuCategory[] {
     return this.categories
       .filter((c) => c.cafeId === cafeId && c.active)

@@ -277,6 +277,39 @@ export async function deleteDashboardPromo(token: string, id: string): Promise<v
   }
 }
 
+export async function fetchDashboardCafe(token: string): Promise<Cafe> {
+  const res = await fetch(`${API_BASE}/dashboard/cafe`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to fetch café profile');
+  }
+  const data = await res.json();
+  return data.cafe;
+}
+
+export async function updateDashboardCafeStatus(
+  token: string,
+  isOpen: boolean,
+  pauseReason?: string
+): Promise<Cafe> {
+  const res = await fetch(`${API_BASE}/dashboard/cafe/status`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ isOpen, pauseReason }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to update store status');
+  }
+  return data.cafe;
+}
+
+
 
 
 

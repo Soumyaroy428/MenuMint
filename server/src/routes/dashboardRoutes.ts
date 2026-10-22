@@ -386,4 +386,52 @@ dashboardRouter.delete('/promos/:id', (req: AuthenticatedRequest, res: Response)
   });
 });
 
+// 13. Get café profile for authenticated owner
+dashboardRouter.get('/cafe', (req: AuthenticatedRequest, res: Response): void => {
+  const cafeId = req.user!.cafeId;
+  const cafe = db.getCafeById(cafeId);
+
+  if (!cafe) {
+    res.status(404).json({
+      error: 'Not Found',
+      message: 'Café profile not found.',
+    });
+    return;
+  }
+
+  res.json({
+    cafe,
+  });
+});
+
+// 14. Update store operating status (Open / Paused with optional rush notice)
+dashboardRouter.patch('/cafe/status', (req: AuthenticatedRequest, res: Response): void => {
+  const cafeId = req.user!.cafeId;
+  const { isOpen, pauseReason } = req.body;
+
+  if (typeof isOpen !== 'boolean') {
+    res.status(400).json({
+      error: 'Validation Error',
+      message: 'Field "isOpen" must be a boolean.',
+    });
+    return;
+  }
+
+  const updatedCafe = db.updateCafeStatus(cafeId, isOpen, pauseReason);
+  if (!updatedCafe) {
+    res.status(404).json({
+      error: 'Not Found',
+      message: 'Café not found.',
+    });
+    return;
+  }
+
+  res.json({
+    success: true,
+    message: isOpen ? 'Store is now open and accepting orders.' : 'Store ordering has been paused.',
+    cafe: updatedCafe,
+  });
+});
+
+
 

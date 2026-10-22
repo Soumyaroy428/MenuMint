@@ -73,7 +73,7 @@ export const MenuPage: React.FC<MenuPageProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
             <span className={`badge ${cafe.isOpen ? 'badge-success' : 'badge-danger'}`}>
               <Clock size={12} />
-              {cafe.isOpen ? 'Open Now' : 'Closed'}
+              {cafe.isOpen ? 'Accepting Orders' : 'Kitchen Paused'}
             </span>
             <span className="badge badge-info">Digital QR Menu</span>
           </div>
@@ -95,6 +95,32 @@ export const MenuPage: React.FC<MenuPageProps> = ({
       </section>
 
       <div className="container">
+        {/* Ordering Paused Banner */}
+        {!cafe.isOpen && (
+          <div
+            style={{
+              background: '#fffbeb',
+              border: '1px solid #fde68a',
+              borderRadius: 12,
+              padding: '1rem 1.25rem',
+              marginBottom: '1.25rem',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '0.75rem',
+            }}
+          >
+            <AlertCircle size={20} color="#d97706" style={{ marginTop: 2, flexShrink: 0 }} />
+            <div>
+              <div style={{ fontWeight: 700, color: '#92400e', fontSize: '0.95rem' }}>
+                Kitchen Ordering Temporarily Paused
+              </div>
+              <div style={{ color: '#b45309', fontSize: '0.85rem', marginTop: '0.2rem' }}>
+                {cafe.pauseReason || 'This café is taking a short pause for incoming orders. You may still browse items and check back shortly!'}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Search Bar */}
         <div style={{ position: 'relative', marginBottom: '1rem' }}>
           <Search size={18} color="#94a3b8" style={{ position: 'absolute', left: 12, top: 12 }} />

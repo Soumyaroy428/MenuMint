@@ -12,6 +12,7 @@ export interface Cafe {
   currency: string;
   currencySymbol: string;
   isOpen: boolean;
+  pauseReason?: string;
 }
 
 export interface MenuCategory {

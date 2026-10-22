@@ -458,7 +458,87 @@ describe('MenuMint API Test Suite', () => {
     assert.strictEqual(typeof analyticsRes.body.analytics.totalTips, 'number');
     assert.ok(analyticsRes.body.analytics.totalTips >= 150);
   });
+
+  // CP-35: Café Operating Status (Store Open / Kitchen Rush Pause Engine)
+  test('PATCH /api/dashboard/cafe/status should reject unauthenticated requests', async () => {
+    const res = await request(app)
+      .patch('/api/dashboard/cafe/status')
+      .send({ isOpen: false });
+
+    assert.strictEqual(res.status, 401);
+  });
+
+  test('PATCH /api/dashboard/cafe/status should reject non-boolean isOpen', async () => {
+    const res = await request(app)
+      .patch('/api/dashboard/cafe/status')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ isOpen: 'invalid' });
+
+    assert.strictEqual(res.status, 400);
+    assert.match(res.body.message, /must be a boolean/i);
+  });
+
+  test('PATCH /api/dashboard/cafe/status should pause ordering and reject incoming orders', async () => {
+    // 1. Pause orders for Cafe 1
+    const pauseRes = await request(app)
+      .patch('/api/dashboard/cafe/status')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ isOpen: false, pauseReason: 'Kitchen rush: Paused for 20 mins' });
+
+    assert.strictEqual(pauseRes.status, 200);
+    assert.strictEqual(pauseRes.body.cafe.isOpen, false);
+    assert.strictEqual(pauseRes.body.cafe.pauseReason, 'Kitchen rush: Paused for 20 mins');
+
+    // 2. Verify public menu reflects paused status and pauseReason
+    const menuRes = await request(app).get('/api/cafes/daily-grind/menu');
+    assert.strictEqual(menuRes.status, 200);
+    assert.strictEqual(menuRes.body.cafe.isOpen, false);
+    assert.strictEqual(menuRes.body.cafe.pauseReason, 'Kitchen rush: Paused for 20 mins');
+
+    // 3. Attempt placing an order while paused
+    const orderRes = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        orderType: 'dine-in',
+        customerName: 'Rush Customer',
+        items: [{ menuItemId: 'item-1', quantity: 1 }],
+      });
+
+    assert.strictEqual(orderRes.status, 400);
+    assert.strictEqual(orderRes.body.error, 'Café Closed');
+    assert.strictEqual(orderRes.body.message, 'Kitchen rush: Paused for 20 mins');
+
+    // 4. Verify Cafe 2 is unaffected (Tenant Isolation)
+    const cafe2Menu = await request(app).get('/api/cafes/bella-vista/menu');
+    assert.strictEqual(cafe2Menu.status, 200);
+    assert.strictEqual(cafe2Menu.body.cafe.isOpen, true);
+
+    // 5. Reopen store
+    const reopenRes = await request(app)
+      .patch('/api/dashboard/cafe/status')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ isOpen: true });
+
+    assert.strictEqual(reopenRes.status, 200);
+    assert.strictEqual(reopenRes.body.cafe.isOpen, true);
+    assert.strictEqual(reopenRes.body.cafe.pauseReason, undefined);
+
+    // 6. Verify order succeeds after reopening
+    const successfulOrderRes = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        orderType: 'dine-in',
+        customerName: 'Post Reopen Customer',
+        items: [{ menuItemId: 'item-1', quantity: 1 }],
+      });
+
+    assert.strictEqual(successfulOrderRes.status, 201);
+    assert.strictEqual(successfulOrderRes.body.success, true);
+  });
 });
+
 
 
 

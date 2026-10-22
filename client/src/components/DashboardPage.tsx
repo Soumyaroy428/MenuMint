@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Order, MenuItem, MenuCategory, OrderStatus, AnalyticsSummary, PromoCode } from '../types';
+import { User, Order, MenuItem, MenuCategory, OrderStatus, AnalyticsSummary, PromoCode, Cafe } from '../types';
 import {
   loginOwner,
   fetchDashboardOrders,
@@ -14,6 +14,8 @@ import {
   createDashboardPromo,
   toggleDashboardPromo,
   deleteDashboardPromo,
+  fetchDashboardCafe,
+  updateDashboardCafeStatus,
 } from '../api';
 import {
   Lock,
@@ -41,6 +43,8 @@ import {
   UtensilsCrossed,
   Tag,
   Heart,
+  Pause,
+  Play,
 } from 'lucide-react';
 
 interface DashboardPageProps {
@@ -97,6 +101,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
   const [newPromoMinOrder, setNewPromoMinOrder] = useState('');
   const [promoSaving, setPromoSaving] = useState(false);
 
+  // Store Operating Status (CP-35)
+  const [cafeProfile, setCafeProfile] = useState<Cafe | null>(null);
+  const [isStoreModalOpen, setIsStoreModalOpen] = useState(false);
+  const [pauseReasonInput, setPauseReasonInput] = useState('');
+  const [updatingStoreStatus, setUpdatingStoreStatus] = useState(false);
+
   const playOrderChime = () => {
     if (!soundEnabled) return;
     try {
@@ -138,11 +148,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
     if (!isPolling) setLoadingData(true);
     setActionError(null);
     try {
-      const [fetchedOrders, fetchedMenu, fetchedAnalytics, fetchedPromos] = await Promise.all([
+      const [fetchedOrders, fetchedMenu, fetchedAnalytics, fetchedPromos, fetchedCafe] = await Promise.all([
         fetchDashboardOrders(authToken),
         fetchDashboardMenu(authToken),
         fetchDashboardAnalytics(authToken).catch(() => null),
         fetchDashboardPromos(authToken).catch(() => []),
+        fetchDashboardCafe(authToken).catch(() => null),
       ]);
 
       if (isPolling && prevOrderCountRef.current > 0 && fetchedOrders.length > prevOrderCountRef.current) {
@@ -159,6 +170,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
       setCategories(fetchedMenu.categories);
       setMenuItems(fetchedMenu.items);
       setPromos(fetchedPromos);
+      if (fetchedCafe) {
+        setCafeProfile(fetchedCafe);
+      }
       if (fetchedAnalytics) {
         setAnalytics(fetchedAnalytics);
       }
@@ -169,6 +183,21 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
       }
     } finally {
       if (!isPolling) setLoadingData(false);
+    }
+  };
+
+  const handleToggleStore = async (isOpen: boolean, reason?: string) => {
+    if (!token) return;
+    setUpdatingStoreStatus(true);
+    try {
+      const updated = await updateDashboardCafeStatus(token, isOpen, reason);
+      setCafeProfile(updated);
+      setIsStoreModalOpen(false);
+      setPauseReasonInput('');
+    } catch (err: any) {
+      alert(err.message || 'Failed to update store status');
+    } finally {
+      setUpdatingStoreStatus(false);
     }
   };
 
@@ -639,6 +668,78 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
           <button className="btn btn-secondary btn-sm" onClick={handleLogout} style={{ color: '#ef4444' }}>
             <LogOut size={14} /> Sign Out
           </button>
+        </div>
+      </div>
+
+      {/* Store Operating Status Control Bar (CP-35) */}
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '0.75rem',
+          background: cafeProfile?.isOpen === false ? '#fffbeb' : '#f0fdf4',
+          border: `1px solid ${cafeProfile?.isOpen === false ? '#fcd34d' : '#86efac'}`,
+          borderRadius: 12,
+          padding: '0.85rem 1.25rem',
+          marginBottom: '1.25rem',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div
+            style={{
+              width: 12,
+              height: 12,
+              borderRadius: '50%',
+              background: cafeProfile?.isOpen === false ? '#d97706' : '#16a34a',
+              boxShadow: cafeProfile?.isOpen === false ? '0 0 0 4px #fef3c7' : '0 0 0 4px #dcfce7',
+            }}
+          />
+          <div>
+            <div
+              style={{
+                fontWeight: 800,
+                fontSize: '0.95rem',
+                color: cafeProfile?.isOpen === false ? '#92400e' : '#14532d',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+              }}
+            >
+              <span>{cafeProfile?.isOpen === false ? '⏸️ Ordering Currently Paused' : '🟢 Kitchen Accepting Orders (Live)'}</span>
+              <span className={`badge ${cafeProfile?.isOpen === false ? 'badge-warning' : 'badge-success'}`} style={{ fontSize: '0.7rem' }}>
+                {cafeProfile?.isOpen === false ? 'Store Paused' : 'Active'}
+              </span>
+            </div>
+            {cafeProfile?.isOpen === false && cafeProfile.pauseReason && (
+              <div style={{ fontSize: '0.8rem', color: '#b45309', marginTop: 2 }}>
+                Customer Notice: <em>"{cafeProfile.pauseReason}"</em>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {cafeProfile?.isOpen === false ? (
+            <button
+              className="btn btn-primary btn-sm"
+              style={{ background: '#16a34a', borderColor: '#16a34a' }}
+              disabled={updatingStoreStatus}
+              onClick={() => handleToggleStore(true)}
+            >
+              <Play size={14} /> Resume Accepting Orders
+            </button>
+          ) : (
+            <button
+              className="btn btn-secondary btn-sm"
+              style={{ color: '#b45309', borderColor: '#fcd34d' }}
+              disabled={updatingStoreStatus}
+              onClick={() => setIsStoreModalOpen(true)}
+            >
+              <Pause size={14} /> Pause Incoming Orders
+            </button>
+          )}
         </div>
       </div>
 
@@ -1515,6 +1616,86 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
           </div>
         </div>
       )}
+
+      {/* Pause Store Modal (CP-35) */}
+      {isStoreModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsStoreModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Pause size={20} color="#d97706" />
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Pause Incoming Orders</h2>
+              </div>
+              <button onClick={() => setIsStoreModalOpen(false)} style={{ color: '#94a3b8' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '1rem' }}>
+              Pausing will immediately stop new customers from placing orders on your digital menu. Current active orders can still be fulfilled.
+            </p>
+
+            <div style={{ marginBottom: '1rem' }}>
+              <label className="form-label" style={{ marginBottom: '0.4rem' }}>Quick Preset Notice</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                {[
+                  'Kitchen rush: Paused for 15 mins',
+                  'High order volume: Paused for 30 mins',
+                  'Sold out of fresh dough: Prepping now',
+                  'Closed for the rest of today',
+                ].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{
+                      fontSize: '0.75rem',
+                      borderColor: pauseReasonInput === preset ? '#d97706' : '#e2e8f0',
+                      background: pauseReasonInput === preset ? '#fffbeb' : '#ffffff',
+                      color: pauseReasonInput === preset ? '#92400e' : '#475569',
+                    }}
+                    onClick={() => setPauseReasonInput(preset)}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+              <label className="form-label">Customer Notice / Pause Reason (Optional)</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="e.g. Kitchen rush: Paused for 20 mins"
+                value={pauseReasonInput}
+                onChange={(e) => setPauseReasonInput(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ flex: 1 }}
+                onClick={() => setIsStoreModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ flex: 1, background: '#d97706', borderColor: '#d97706' }}
+                disabled={updatingStoreStatus}
+                onClick={() => handleToggleStore(false, pauseReasonInput || undefined)}
+              >
+                {updatingStoreStatus ? 'Pausing...' : 'Confirm Pause Orders'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

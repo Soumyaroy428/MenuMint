@@ -44,6 +44,7 @@ publicRouter.get('/cafes/:slug', (req: Request, res: Response): void => {
       currency: cafe.currency,
       currencySymbol: cafe.currencySymbol,
       isOpen: cafe.isOpen,
+      pauseReason: cafe.pauseReason,
     },
   });
 });
@@ -75,6 +76,7 @@ publicRouter.get('/cafes/:slug/menu', (req: Request, res: Response): void => {
       currency: cafe.currency,
       currencySymbol: cafe.currencySymbol,
       isOpen: cafe.isOpen,
+      pauseReason: cafe.pauseReason,
     },
     categories,
     items,
@@ -98,7 +100,7 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
   if (!cafe.isOpen) {
     res.status(400).json({
       error: 'Café Closed',
-      message: `${cafe.name} is currently closed for new orders.`,
+      message: cafe.pauseReason || `${cafe.name} is currently closed for new orders.`,
     });
     return;
   }
