@@ -196,6 +196,7 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
       unitPrice,
       quantity,
       lineTotal,
+      dietaryTags: authenticItem.dietaryTags,
     });
   }
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Order, MenuItem, MenuCategory, OrderStatus, AnalyticsSummary, PromoCode, Cafe } from '../types';
+import { User, Order, MenuItem, MenuCategory, OrderStatus, AnalyticsSummary, PromoCode, Cafe, DietaryTag } from '../types';
 import {
   loginOwner,
   fetchDashboardOrders,
@@ -91,6 +91,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
   const [itemPrice, setItemPrice] = useState('');
   const [itemDescription, setItemDescription] = useState('');
   const [itemImageUrl, setItemImageUrl] = useState('');
+  const [itemDietaryTags, setItemDietaryTags] = useState<DietaryTag[]>([]);
   const [itemSaving, setItemSaving] = useState(false);
 
   // Promo Code Modal State
@@ -258,6 +259,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
     setItemPrice('');
     setItemDescription('');
     setItemImageUrl('');
+    setItemDietaryTags([]);
     setIsItemModalOpen(true);
   };
 
@@ -268,6 +270,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
     setItemPrice((item.price / 100).toFixed(2));
     setItemDescription(item.description || '');
     setItemImageUrl(item.imageUrl || '');
+    setItemDietaryTags(item.dietaryTags || []);
     setIsItemModalOpen(true);
   };
 
@@ -296,6 +299,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
           price: priceInCents,
           description: itemDescription.trim(),
           imageUrl: itemImageUrl.trim(),
+          dietaryTags: itemDietaryTags,
         });
         setMenuItems((prev) => prev.map((i) => (i.id === editingItem.id ? updated : i)));
       } else {
@@ -305,6 +309,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
           price: priceInCents,
           description: itemDescription.trim(),
           imageUrl: itemImageUrl.trim(),
+          dietaryTags: itemDietaryTags,
         });
         setMenuItems((prev) => [...prev, created]);
       }
@@ -426,7 +431,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
               .map(
                 (item) => `
               <div class="item-row">
-                <span class="bold">${item.quantity}x ${item.name}</span>
+                <div>
+                  <span class="bold">${item.quantity}x ${item.name}</span>
+                  ${item.dietaryTags && item.dietaryTags.length > 0 ? `<div style="font-size: 10px; color: #555; font-weight: normal;">[${item.dietaryTags.join(', ')}]</div>` : ''}
+                </div>
                 <span>${currentUser?.currencySymbol || '$'}${(item.lineTotal / 100).toFixed(2)}</span>
               </div>
             `
@@ -910,9 +918,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
                       <tbody>
                         {ord.items.map((item, idx) => (
                           <tr key={idx}>
-                            <td style={{ fontWeight: 600 }}>{item.quantity}x</td>
-                            <td>{item.name}</td>
-                            <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                            <td style={{ fontWeight: 600, verticalAlign: 'top' }}>{item.quantity}x</td>
+                            <td>
+                              <div>{item.name}</div>
+                              {item.dietaryTags && item.dietaryTags.length > 0 && (
+                                <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 2 }}>
+                                  {item.dietaryTags.map((t) => (
+                                    <span key={t} style={{ fontSize: '0.62rem', padding: '0 4px', borderRadius: 4, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0' }}>
+                                      {t === 'VEGAN' ? '🌱 Vegan' : t === 'VEGETARIAN' ? '🥗 Veg' : t === 'GLUTEN_FREE' ? '🌾 GF' : t === 'NUT_FREE' ? '🥜 Nut-Free' : t === 'SPICY' ? '🌶️ Spicy' : '⭐ Pick'}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                            <td style={{ textAlign: 'right', fontWeight: 600, verticalAlign: 'top' }}>
                               {currentUser.currencySymbol}{(item.lineTotal / 100).toFixed(2)}
                             </td>
                           </tr>
@@ -1056,11 +1075,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
                   }}
                 >
                   <div style={{ flex: 1, minWidth: 200 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                       <strong style={{ fontSize: '1rem' }}>{item.name}</strong>
                       <span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>
                         {category?.name || 'Item'}
                       </span>
+                      {item.dietaryTags && item.dietaryTags.map((tag) => (
+                        <span key={tag} className="badge" style={{ fontSize: '0.65rem', background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0' }}>
+                          {tag === 'VEGAN' ? '🌱 Vegan' : tag === 'VEGETARIAN' ? '🥗 Veg' : tag === 'GLUTEN_FREE' ? '🌾 GF' : tag === 'NUT_FREE' ? '🥜 Nut-Free' : tag === 'SPICY' ? '🌶️ Spicy' : '⭐ Pick'}
+                        </span>
+                      ))}
                     </div>
                     {item.description && (
                       <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 2 }}>{item.description}</p>
@@ -1491,7 +1515,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
                 />
               </div>
 
-              <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
                 <label className="form-label">Image URL (Optional)</label>
                 <input
                   type="url"
@@ -1500,6 +1524,53 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
                   value={itemImageUrl}
                   onChange={(e) => setItemImageUrl(e.target.value)}
                 />
+              </div>
+
+              {/* Dietary Tags Checkboxes (CP-36) */}
+              <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                <label className="form-label" style={{ marginBottom: '0.4rem' }}>Dietary & Allergy Tags</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.4rem' }}>
+                  {[
+                    { tag: 'VEGAN', label: '🌱 Vegan' },
+                    { tag: 'VEGETARIAN', label: '🥗 Vegetarian' },
+                    { tag: 'GLUTEN_FREE', label: '🌾 Gluten-Free' },
+                    { tag: 'NUT_FREE', label: '🥜 Nut-Free' },
+                    { tag: 'SPICY', label: '🌶️ Spicy' },
+                    { tag: 'CHEF_SPECIAL', label: "⭐ Chef's Pick" },
+                  ].map(({ tag, label }) => {
+                    const isChecked = itemDietaryTags.includes(tag as any);
+                    return (
+                      <label
+                        key={tag}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.4rem',
+                          padding: '0.35rem 0.5rem',
+                          borderRadius: 6,
+                          background: isChecked ? '#f0fdf4' : '#f8fafc',
+                          border: `1px solid ${isChecked ? '#86efac' : '#e2e8f0'}`,
+                          fontSize: '0.78rem',
+                          cursor: 'pointer',
+                          fontWeight: isChecked ? 700 : 500,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setItemDietaryTags([...itemDietaryTags, tag as any]);
+                            } else {
+                              setItemDietaryTags(itemDietaryTags.filter((t) => t !== tag));
+                            }
+                          }}
+                        />
+                        <span>{label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
 
               <div style={{ display: 'flex', gap: '0.5rem' }}>

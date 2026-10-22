@@ -24,6 +24,8 @@ export interface MenuCategory {
   active: boolean;
 }
 
+export type DietaryTag = 'VEGAN' | 'VEGETARIAN' | 'GLUTEN_FREE' | 'NUT_FREE' | 'SPICY' | 'CHEF_SPECIAL';
+
 export interface MenuItem {
   id: string;
   cafeId: string;
@@ -33,6 +35,7 @@ export interface MenuItem {
   price: number; // Stored in minor units (cents), e.g., 450 = $4.50
   imageUrl: string;
   isAvailable: boolean;
+  dietaryTags?: DietaryTag[];
   createdAt: string;
 }
 
@@ -42,6 +45,7 @@ export interface OrderItemSnapshot {
   unitPrice: number; // Stored price at moment of ordering
   quantity: number;
   lineTotal: number;
+  dietaryTags?: DietaryTag[];
 }
 
 export interface Order {

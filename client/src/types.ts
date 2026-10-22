@@ -23,6 +23,8 @@ export interface MenuCategory {
   active: boolean;
 }
 
+export type DietaryTag = 'VEGAN' | 'VEGETARIAN' | 'GLUTEN_FREE' | 'NUT_FREE' | 'SPICY' | 'CHEF_SPECIAL';
+
 export interface MenuItem {
   id: string;
   cafeId: string;
@@ -32,6 +34,7 @@ export interface MenuItem {
   price: number; // in cents
   imageUrl: string;
   isAvailable: boolean;
+  dietaryTags?: DietaryTag[];
 }
 
 export interface CartItem {
@@ -45,6 +48,7 @@ export interface OrderItemSnapshot {
   unitPrice: number;
   quantity: number;
   lineTotal: number;
+  dietaryTags?: DietaryTag[];
 }
 
 export interface Order {

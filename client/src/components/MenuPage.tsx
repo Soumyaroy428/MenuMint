@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
-import { Cafe, MenuCategory, MenuItem } from '../types';
+import { Cafe, MenuCategory, MenuItem, DietaryTag } from '../types';
 import { Plus, Check, MapPin, Phone, Clock, Search, AlertCircle } from 'lucide-react';
+
+export const DIETARY_CONFIG: Record<DietaryTag, { label: string; emoji: string; bg: string; color: string; border: string }> = {
+  VEGAN: { label: 'Vegan', emoji: '🌱', bg: '#ecfdf5', color: '#065f46', border: '#a7f3d0' },
+  VEGETARIAN: { label: 'Vegetarian', emoji: '🥗', bg: '#f0fdf4', color: '#166534', border: '#bbf7d0' },
+  GLUTEN_FREE: { label: 'Gluten-Free', emoji: '🌾', bg: '#fffbeb', color: '#92400e', border: '#fde68a' },
+  NUT_FREE: { label: 'Nut-Free', emoji: '🥜', bg: '#f0f9ff', color: '#075985', border: '#bae6fd' },
+  SPICY: { label: 'Spicy', emoji: '🌶️', bg: '#fef2f2', color: '#991b1b', border: '#fecaca' },
+  CHEF_SPECIAL: { label: "Chef's Pick", emoji: '⭐', bg: '#faf5ff', color: '#6b21a8', border: '#e9d5ff' },
+};
 
 interface MenuPageProps {
   cafe: Cafe | null;
@@ -24,6 +33,7 @@ export const MenuPage: React.FC<MenuPageProps> = ({
   onRetry,
 }) => {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
+  const [selectedDietaryFilter, setSelectedDietaryFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   if (loading) {
@@ -62,7 +72,10 @@ export const MenuPage: React.FC<MenuPageProps> = ({
     const matchesSearch =
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.description.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
+    const matchesDietary =
+      selectedDietaryFilter === 'all' ||
+      (item.dietaryTags && item.dietaryTags.includes(selectedDietaryFilter as any));
+    return matchesCategory && matchesSearch && matchesDietary;
   });
 
   return (
@@ -155,6 +168,43 @@ export const MenuPage: React.FC<MenuPageProps> = ({
           </div>
         </div>
 
+        {/* Dietary Filters Bar (CP-36) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', marginRight: '0.2rem' }}>Dietary:</span>
+          <button
+            type="button"
+            className={`btn btn-sm ${selectedDietaryFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ fontSize: '0.75rem', padding: '0.25rem 0.65rem', borderRadius: 20 }}
+            onClick={() => setSelectedDietaryFilter('all')}
+          >
+            All
+          </button>
+          {(['VEGAN', 'VEGETARIAN', 'GLUTEN_FREE', 'NUT_FREE', 'SPICY', 'CHEF_SPECIAL'] as DietaryTag[]).map((tag) => {
+            const config = DIETARY_CONFIG[tag];
+            const isSelected = selectedDietaryFilter === tag;
+            return (
+              <button
+                key={tag}
+                type="button"
+                className="btn btn-sm"
+                style={{
+                  fontSize: '0.75rem',
+                  padding: '0.25rem 0.65rem',
+                  borderRadius: 20,
+                  background: isSelected ? config.bg : '#ffffff',
+                  color: isSelected ? config.color : '#475569',
+                  border: `1px solid ${isSelected ? config.border : '#e2e8f0'}`,
+                  fontWeight: isSelected ? 700 : 500,
+                  transition: 'all 0.15s ease',
+                }}
+                onClick={() => setSelectedDietaryFilter(isSelected ? 'all' : tag)}
+              >
+                <span>{config.emoji} {config.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* Menu Items Grid */}
         {filteredItems.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#64748b' }}>
@@ -194,6 +244,34 @@ export const MenuPage: React.FC<MenuPageProps> = ({
 
                   <div className="menu-card-body">
                     <h3 className="menu-card-title">{item.name}</h3>
+                    {item.dietaryTags && item.dietaryTags.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', margin: '0.25rem 0 0.4rem' }}>
+                        {item.dietaryTags.map((tag) => {
+                          const cfg = DIETARY_CONFIG[tag];
+                          if (!cfg) return null;
+                          return (
+                            <span
+                              key={tag}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.2rem',
+                                background: cfg.bg,
+                                color: cfg.color,
+                                border: `1px solid ${cfg.border}`,
+                                borderRadius: 6,
+                                padding: '1px 5px',
+                                fontSize: '0.68rem',
+                                fontWeight: 600,
+                              }}
+                            >
+                              <span>{cfg.emoji}</span>
+                              <span>{cfg.label}</span>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
                     <p className="menu-card-desc">{item.description}</p>
 
                     <div className="menu-card-footer">

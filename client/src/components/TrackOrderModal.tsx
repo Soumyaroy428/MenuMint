@@ -116,7 +116,7 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
             .map(
               (item) => `
             <div class="row">
-              <span>${item.quantity}x ${item.name}</span>
+              <span>${item.quantity}x ${item.name}${item.dietaryTags && item.dietaryTags.length > 0 ? ` [${item.dietaryTags.join(', ')}]` : ''}</span>
               <span>${currencySymbol}${(item.lineTotal / 100).toFixed(2)}</span>
             </div>
           `
@@ -305,6 +305,11 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
                 <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '2px 0' }}>
                   <span style={{ color: '#475569' }}>
                     {item.quantity}x {item.name}
+                    {item.dietaryTags && item.dietaryTags.length > 0 && (
+                      <span style={{ fontSize: '0.7rem', color: '#059669', marginLeft: 6 }}>
+                        ({item.dietaryTags.map((t) => t === 'VEGAN' ? '🌱 Vegan' : t === 'VEGETARIAN' ? '🥗 Veg' : t === 'GLUTEN_FREE' ? '🌾 GF' : t === 'NUT_FREE' ? '🥜 Nut-Free' : t === 'SPICY' ? '🌶️ Spicy' : '⭐ Pick').join(', ')})
+                      </span>
+                    )}
                   </span>
                   <span style={{ fontWeight: 600 }}>
                     {currencySymbol}{(item.lineTotal / 100).toFixed(2)}

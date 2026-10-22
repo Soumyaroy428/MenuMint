@@ -537,7 +537,54 @@ describe('MenuMint API Test Suite', () => {
     assert.strictEqual(successfulOrderRes.status, 201);
     assert.strictEqual(successfulOrderRes.body.success, true);
   });
+
+  // CP-36: Customer Dietary Badges & Filter Engine
+  test('POST /api/dashboard/items should create menu item with dietary tags', async () => {
+    const res = await request(app)
+      .post('/api/dashboard/items')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        name: 'Organic Matcha Chia Bowl',
+        categoryId: 'cat-4',
+        price: 850,
+        description: 'Ceremonial grade Uji matcha with coconut chia pudding and wild blueberries.',
+        dietaryTags: ['VEGAN', 'GLUTEN_FREE', 'CHEF_SPECIAL'],
+      });
+
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.item.name, 'Organic Matcha Chia Bowl');
+    assert.deepStrictEqual(res.body.item.dietaryTags, ['VEGAN', 'GLUTEN_FREE', 'CHEF_SPECIAL']);
+  });
+
+  test('PUT /api/dashboard/items/:id should update dietary tags and snapshot them on order creation', async () => {
+    // 1. Update dietary tags on item-1
+    const updateRes = await request(app)
+      .put('/api/dashboard/items/item-1')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        dietaryTags: ['VEGETARIAN', 'GLUTEN_FREE', 'CHEF_SPECIAL'],
+      });
+
+    assert.strictEqual(updateRes.status, 200);
+    assert.deepStrictEqual(updateRes.body.item.dietaryTags, ['VEGETARIAN', 'GLUTEN_FREE', 'CHEF_SPECIAL']);
+
+    // 2. Place an order containing item-1
+    const orderRes = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        orderType: 'dine-in',
+        customerName: 'Dietary Conscientious Customer',
+        items: [{ menuItemId: 'item-1', quantity: 1 }],
+      });
+
+    assert.strictEqual(orderRes.status, 201);
+    const orderedItem = orderRes.body.order.items.find((i: any) => i.menuItemId === 'item-1');
+    assert.ok(orderedItem);
+    assert.deepStrictEqual(orderedItem.dietaryTags, ['VEGETARIAN', 'GLUTEN_FREE', 'CHEF_SPECIAL']);
+  });
 });
+
 
 
 

@@ -18,6 +18,8 @@ const VALID_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   CANCELLED: [], // Terminal state
 };
 
+const ALLOWED_DIETARY_TAGS = ['VEGAN', 'VEGETARIAN', 'GLUTEN_FREE', 'NUT_FREE', 'SPICY', 'CHEF_SPECIAL'];
+
 // 1. Get orders for the authenticated café (Strict Tenant Isolation)
 dashboardRouter.get('/orders', (req: AuthenticatedRequest, res: Response): void => {
   const cafeId = req.user!.cafeId;
@@ -130,7 +132,7 @@ dashboardRouter.patch('/items/:id/availability', (req: AuthenticatedRequest, res
 // 5. Create a new menu item
 dashboardRouter.post('/items', (req: AuthenticatedRequest, res: Response): void => {
   const cafeId = req.user!.cafeId;
-  const { name, categoryId, price, description, imageUrl } = req.body;
+  const { name, categoryId, price, description, imageUrl, dietaryTags } = req.body;
 
   if (!name || typeof name !== 'string' || name.trim().length === 0) {
     res.status(400).json({ error: 'Validation Error', message: 'Item name is required.' });
@@ -155,6 +157,11 @@ dashboardRouter.post('/items', (req: AuthenticatedRequest, res: Response): void 
     return;
   }
 
+  let validDietaryTags: any = undefined;
+  if (Array.isArray(dietaryTags)) {
+    validDietaryTags = dietaryTags.filter((t) => ALLOWED_DIETARY_TAGS.includes(t));
+  }
+
   const createdItem = db.createMenuItem({
     cafeId,
     categoryId,
@@ -163,6 +170,7 @@ dashboardRouter.post('/items', (req: AuthenticatedRequest, res: Response): void 
     price: numericPrice,
     imageUrl: imageUrl ? String(imageUrl).trim() : '',
     isAvailable: true,
+    dietaryTags: validDietaryTags,
   });
 
   res.status(201).json({
@@ -176,7 +184,7 @@ dashboardRouter.post('/items', (req: AuthenticatedRequest, res: Response): void 
 dashboardRouter.put('/items/:id', (req: AuthenticatedRequest, res: Response): void => {
   const { id } = req.params;
   const cafeId = req.user!.cafeId;
-  const { name, categoryId, price, description, imageUrl, isAvailable } = req.body;
+  const { name, categoryId, price, description, imageUrl, isAvailable, dietaryTags } = req.body;
 
   const item = db.getItemById(id);
   if (!item) {
@@ -228,6 +236,10 @@ dashboardRouter.put('/items/:id', (req: AuthenticatedRequest, res: Response): vo
 
   if (typeof isAvailable === 'boolean') {
     updates.isAvailable = isAvailable;
+  }
+
+  if (Array.isArray(dietaryTags)) {
+    updates.dietaryTags = dietaryTags.filter((t) => ALLOWED_DIETARY_TAGS.includes(t));
   }
 
   const updated = db.updateMenuItem(id, updates);

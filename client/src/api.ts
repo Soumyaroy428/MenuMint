@@ -1,4 +1,4 @@
-import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode } from './types';
+import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, DietaryTag } from './types';
 
 const API_BASE = '/api';
 
@@ -127,7 +127,7 @@ export async function toggleItemAvailability(token: string, itemId: string, isAv
 
 export async function createMenuItem(
   token: string,
-  itemData: { name: string; categoryId: string; price: number; description?: string; imageUrl?: string }
+  itemData: { name: string; categoryId: string; price: number; description?: string; imageUrl?: string; dietaryTags?: DietaryTag[] }
 ): Promise<MenuItem> {
   const res = await fetch(`${API_BASE}/dashboard/items`, {
     method: 'POST',
@@ -148,7 +148,7 @@ export async function createMenuItem(
 export async function updateMenuItem(
   token: string,
   itemId: string,
-  updates: { name?: string; categoryId?: string; price?: number; description?: string; imageUrl?: string; isAvailable?: boolean }
+  updates: { name?: string; categoryId?: string; price?: number; description?: string; imageUrl?: string; isAvailable?: boolean; dietaryTags?: DietaryTag[] }
 ): Promise<MenuItem> {
   const res = await fetch(`${API_BASE}/dashboard/items/${itemId}`, {
     method: 'PUT',

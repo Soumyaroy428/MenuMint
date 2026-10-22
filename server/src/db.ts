@@ -49,6 +49,7 @@ class Database {
       price: 475, // $4.75
       imageUrl: 'https://images.unsplash.com/photo-1577968897966-3d4325b36b61?auto=format&fit=crop&w=600&q=80',
       isAvailable: true,
+      dietaryTags: ['VEGETARIAN', 'CHEF_SPECIAL'],
       createdAt: new Date().toISOString(),
     },
     {
@@ -60,6 +61,7 @@ class Database {
       price: 525, // $5.25
       imageUrl: 'https://images.unsplash.com/photo-1534778101976-62847782c213?auto=format&fit=crop&w=600&q=80',
       isAvailable: true,
+      dietaryTags: ['VEGETARIAN'],
       createdAt: new Date().toISOString(),
     },
     {
@@ -71,6 +73,7 @@ class Database {
       price: 425, // $4.25
       imageUrl: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=600&q=80',
       isAvailable: true,
+      dietaryTags: ['VEGETARIAN', 'GLUTEN_FREE'],
       createdAt: new Date().toISOString(),
     },
     {
@@ -82,6 +85,7 @@ class Database {
       price: 550, // $5.50
       imageUrl: 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?auto=format&fit=crop&w=600&q=80',
       isAvailable: true,
+      dietaryTags: ['VEGAN', 'GLUTEN_FREE', 'CHEF_SPECIAL'],
       createdAt: new Date().toISOString(),
     },
     {
@@ -93,6 +97,7 @@ class Database {
       price: 450, // $4.50
       imageUrl: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?auto=format&fit=crop&w=600&q=80',
       isAvailable: true,
+      dietaryTags: ['VEGAN', 'GLUTEN_FREE'],
       createdAt: new Date().toISOString(),
     },
     {
@@ -104,6 +109,7 @@ class Database {
       price: 495, // $4.95
       imageUrl: 'https://images.unsplash.com/photo-1555507036-ab1f4038808a?auto=format&fit=crop&w=600&q=80',
       isAvailable: true,
+      dietaryTags: ['VEGETARIAN'],
       createdAt: new Date().toISOString(),
     },
     {
@@ -115,6 +121,7 @@ class Database {
       price: 450, // $4.50
       imageUrl: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=600&q=80',
       isAvailable: false, // Intentionally unavailable for CP-10 verification!
+      dietaryTags: ['VEGETARIAN'],
       createdAt: new Date().toISOString(),
     },
     {
@@ -126,6 +133,7 @@ class Database {
       price: 1250, // $12.50
       imageUrl: 'https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=600&q=80',
       isAvailable: true,
+      dietaryTags: ['VEGETARIAN', 'CHEF_SPECIAL'],
       createdAt: new Date().toISOString(),
     },
     {
@@ -137,6 +145,7 @@ class Database {
       price: 1175, // $11.75
       imageUrl: 'https://images.unsplash.com/photo-1484723091739-0045614eb6c7?auto=format&fit=crop&w=600&q=80',
       isAvailable: true,
+      dietaryTags: ['VEGETARIAN'],
       createdAt: new Date().toISOString(),
     },
     // Cafe 2 item for tenant isolation testing
@@ -149,6 +158,7 @@ class Database {
       price: 350,
       imageUrl: '',
       isAvailable: true,
+      dietaryTags: ['VEGAN', 'GLUTEN_FREE'],
       createdAt: new Date().toISOString(),
     },
   ];
