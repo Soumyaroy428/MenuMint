@@ -11,6 +11,8 @@ export interface Cafe {
   phone: string;
   currency: string;
   currencySymbol: string;
+  taxRate?: number;
+  taxName?: string;
   isOpen: boolean;
   pauseReason?: string;
 }
@@ -69,6 +71,8 @@ export interface Order {
   promoCode?: string;
   tip?: number; // in cents (gratuity)
   tax: number;
+  taxRate?: number;
+  taxName?: string;
   total: number;
   feedback?: {
     rating: number;

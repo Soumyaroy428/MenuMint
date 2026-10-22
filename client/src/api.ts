@@ -338,6 +338,30 @@ export async function fetchDashboardFeedbacks(token: string): Promise<OrderFeedb
   return data.feedbacks;
 }
 
+export async function updateDashboardCafeSettings(
+  token: string,
+  settings: {
+    taxRate?: number;
+    taxName?: string;
+    currency?: string;
+    currencySymbol?: string;
+  }
+): Promise<Cafe> {
+  const res = await fetch(`${API_BASE}/dashboard/cafe/settings`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(settings),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to update store settings');
+  }
+  return data.cafe;
+}
+
 
 
 

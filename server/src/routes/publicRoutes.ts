@@ -43,6 +43,8 @@ publicRouter.get('/cafes/:slug', (req: Request, res: Response): void => {
       phone: cafe.phone,
       currency: cafe.currency,
       currencySymbol: cafe.currencySymbol,
+      taxRate: cafe.taxRate,
+      taxName: cafe.taxName,
       isOpen: cafe.isOpen,
       pauseReason: cafe.pauseReason,
     },
@@ -75,6 +77,8 @@ publicRouter.get('/cafes/:slug/menu', (req: Request, res: Response): void => {
       phone: cafe.phone,
       currency: cafe.currency,
       currencySymbol: cafe.currencySymbol,
+      taxRate: cafe.taxRate,
+      taxName: cafe.taxName,
       isOpen: cafe.isOpen,
       pauseReason: cafe.pauseReason,
     },
@@ -245,12 +249,14 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
     calculatedTip = numericTip;
   }
 
-  // Calculate tax (5% flat demo tax) on post-discount subtotal
+  // Calculate regional tax on post-discount subtotal (CP-38)
   const discountedSubtotal = Math.max(0, calculatedSubtotal - discountAmount);
-  const calculatedTax = Math.round(discountedSubtotal * 0.05);
+  const effectiveTaxRate = typeof cafe.taxRate === 'number' ? cafe.taxRate : 8.25;
+  const effectiveTaxName = cafe.taxName || 'Sales Tax';
+  const calculatedTax = Math.round((discountedSubtotal * effectiveTaxRate) / 100);
   const calculatedTotal = discountedSubtotal + calculatedTax + calculatedTip;
 
-  // Persist order
+  // Persist order with snapshot taxRate & taxName
   const newOrder = db.createOrder({
     cafeId: cafe.id,
     status: 'PENDING',
@@ -265,6 +271,8 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
     promoCode: appliedPromoCode,
     tip: calculatedTip > 0 ? calculatedTip : undefined,
     tax: calculatedTax,
+    taxRate: effectiveTaxRate,
+    taxName: effectiveTaxName,
     total: calculatedTotal,
   });
 
@@ -285,6 +293,8 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
       promoCode: newOrder.promoCode,
       tip: newOrder.tip,
       tax: newOrder.tax,
+      taxRate: newOrder.taxRate,
+      taxName: newOrder.taxName,
       total: newOrder.total,
       currency: cafe.currency,
       currencySymbol: cafe.currencySymbol,
@@ -324,6 +334,8 @@ publicRouter.get('/orders/:orderRef', (req: Request, res: Response): void => {
       promoCode: order.promoCode,
       tip: order.tip,
       tax: order.tax,
+      taxRate: order.taxRate,
+      taxName: order.taxName,
       total: order.total,
       feedback: order.feedback,
       createdAt: order.createdAt,

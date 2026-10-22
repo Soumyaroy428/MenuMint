@@ -101,10 +101,12 @@ describe('MenuMint API Test Suite', () => {
     assert.strictEqual(res.status, 201);
     assert.strictEqual(res.body.success, true);
     assert.ok(res.body.order.orderRef.startsWith('ORD-'));
-    // Expected: 2 * 475 = 950 subtotal + 5% tax (48) = 998 total
+    // Expected: 2 * 475 = 950 subtotal + 8.25% Sales Tax (78) = 1028 total
     assert.strictEqual(res.body.order.subtotal, 950);
-    assert.strictEqual(res.body.order.tax, 48);
-    assert.strictEqual(res.body.order.total, 998);
+    assert.strictEqual(res.body.order.tax, 78);
+    assert.strictEqual(res.body.order.taxRate, 8.25);
+    assert.strictEqual(res.body.order.taxName, 'Sales Tax');
+    assert.strictEqual(res.body.order.total, 1028);
   });
 
   // 6. CP-14: Authentication
@@ -346,7 +348,7 @@ describe('MenuMint API Test Suite', () => {
   test('POST /api/orders should apply promo code discount and recalculate total correctly', async () => {
     // Note: item-1 was updated to 495 in test 17; item-2 is 525. 495 + 525 = 1020 subtotal
     // MINT10 = 10% off = 102 discount -> 918 discounted subtotal
-    // 5% tax on 918 = 46 tax -> 964 total
+    // 8.25% Sales Tax on 918 = 76 tax -> 994 total
     const res = await request(app)
       .post('/api/orders')
       .send({
@@ -364,8 +366,10 @@ describe('MenuMint API Test Suite', () => {
     assert.strictEqual(res.body.order.subtotal, 1020);
     assert.strictEqual(res.body.order.discount, 102);
     assert.strictEqual(res.body.order.promoCode, 'MINT10');
-    assert.strictEqual(res.body.order.tax, 46);
-    assert.strictEqual(res.body.order.total, 964);
+    assert.strictEqual(res.body.order.tax, 76);
+    assert.strictEqual(res.body.order.taxRate, 8.25);
+    assert.strictEqual(res.body.order.taxName, 'Sales Tax');
+    assert.strictEqual(res.body.order.total, 994);
   });
 
   test('GET /api/dashboard/promos should return tenant-scoped promo codes', async () => {
@@ -430,9 +434,9 @@ describe('MenuMint API Test Suite', () => {
 
   test('POST /api/orders should calculate total with tip and persist tip snapshot', async () => {
     // 1x item-1 (495). subtotal = 495.
-    // 5% tax = Math.round(495 * 0.05) = 25.
+    // 8.25% Sales Tax = Math.round(495 * 0.0825) = 41.
     // Tip = 150 ($1.50).
-    // Total = 495 + 25 + 150 = 670.
+    // Total = 495 + 41 + 150 = 686.
     const res = await request(app)
       .post('/api/orders')
       .send({
@@ -445,9 +449,11 @@ describe('MenuMint API Test Suite', () => {
 
     assert.strictEqual(res.status, 201);
     assert.strictEqual(res.body.order.subtotal, 495);
-    assert.strictEqual(res.body.order.tax, 25);
+    assert.strictEqual(res.body.order.tax, 41);
+    assert.strictEqual(res.body.order.taxRate, 8.25);
+    assert.strictEqual(res.body.order.taxName, 'Sales Tax');
     assert.strictEqual(res.body.order.tip, 150);
-    assert.strictEqual(res.body.order.total, 670);
+    assert.strictEqual(res.body.order.total, 686);
 
     // Verify analytics reflects tip
     const analyticsRes = await request(app)
@@ -720,6 +726,97 @@ describe('MenuMint API Test Suite', () => {
     assert.ok(analyticsRes.body.analytics.averageRating >= 1 && analyticsRes.body.analytics.averageRating <= 5);
     assert.ok(typeof analyticsRes.body.analytics.totalFeedbackCount === 'number');
     assert.ok(analyticsRes.body.analytics.totalFeedbackCount >= 2);
+  });
+
+  // CP-38: Multi-Currency & Regional Tax Calculation Engine
+  test('GET /api/cafes/:slug/menu should return regional tax rate and tax name', async () => {
+    // Cafe 1: 8.25% Sales Tax (USD)
+    const c1 = await request(app).get('/api/cafes/daily-grind/menu');
+    assert.strictEqual(c1.status, 200);
+    assert.strictEqual(c1.body.cafe.taxRate, 8.25);
+    assert.strictEqual(c1.body.cafe.taxName, 'Sales Tax');
+    assert.strictEqual(c1.body.cafe.currency, 'USD');
+    assert.strictEqual(c1.body.cafe.currencySymbol, '$');
+
+    // Cafe 2: 10.0% VAT (EUR)
+    const c2 = await request(app).get('/api/cafes/bella-vista/menu');
+    assert.strictEqual(c2.status, 200);
+    assert.strictEqual(c2.body.cafe.taxRate, 10.0);
+    assert.strictEqual(c2.body.cafe.taxName, 'VAT');
+    assert.strictEqual(c2.body.cafe.currency, 'EUR');
+    assert.strictEqual(c2.body.cafe.currencySymbol, '€');
+  });
+
+  test('POST /api/orders should calculate dynamic regional tax and snapshot taxRate and taxName', async () => {
+    // 1. Order on Cafe 2 (Bella Vista: 10.0% VAT)
+    // item-201 price: 350 cents. 2 items = 700 cents subtotal.
+    // 10% VAT of 700 = 70 cents. Total = 770 cents.
+    const res2 = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'bella-vista',
+        orderType: 'dine-in',
+        customerName: 'Marco Polo',
+        items: [{ menuItemId: 'item-201', quantity: 2 }],
+      });
+
+    assert.strictEqual(res2.status, 201);
+    assert.strictEqual(res2.body.order.subtotal, 700);
+    assert.strictEqual(res2.body.order.tax, 70); // exactly 10%
+    assert.strictEqual(res2.body.order.taxRate, 10.0);
+    assert.strictEqual(res2.body.order.taxName, 'VAT');
+    assert.strictEqual(res2.body.order.total, 770);
+    assert.strictEqual(res2.body.order.currency, 'EUR');
+    assert.strictEqual(res2.body.order.currencySymbol, '€');
+
+    // Verify snapshot persists on GET /api/orders/:orderRef
+    const orderRef = res2.body.order.orderRef;
+    const trackRes = await request(app).get(`/api/orders/${orderRef}`);
+    assert.strictEqual(trackRes.status, 200);
+    assert.strictEqual(trackRes.body.order.taxRate, 10.0);
+    assert.strictEqual(trackRes.body.order.taxName, 'VAT');
+    assert.strictEqual(trackRes.body.order.tax, 70);
+  });
+
+  test('PATCH /api/dashboard/cafe/settings should update tax and currency settings with validation and tenant isolation', async () => {
+    // 1. Reject invalid tax rate (< 0 or > 50)
+    const invRes1 = await request(app)
+      .patch('/api/dashboard/cafe/settings')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ taxRate: -5 });
+    assert.strictEqual(invRes1.status, 400);
+
+    const invRes2 = await request(app)
+      .patch('/api/dashboard/cafe/settings')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ taxRate: 65 });
+    assert.strictEqual(invRes2.status, 400);
+
+    // 2. Reject empty tax name
+    const invRes3 = await request(app)
+      .patch('/api/dashboard/cafe/settings')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ taxName: '   ' });
+    assert.strictEqual(invRes3.status, 400);
+
+    // 3. Successfully update Cafe 1 settings (e.g. to 9.5% State Sales Tax)
+    const updateRes = await request(app)
+      .patch('/api/dashboard/cafe/settings')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        taxRate: 9.5,
+        taxName: 'State Sales Tax',
+      });
+
+    assert.strictEqual(updateRes.status, 200);
+    assert.strictEqual(updateRes.body.cafe.taxRate, 9.5);
+    assert.strictEqual(updateRes.body.cafe.taxName, 'State Sales Tax');
+
+    // 4. Verify Cafe 2 remains unaffected (Tenant Isolation)
+    const cafe2Check = await request(app).get('/api/cafes/bella-vista/menu');
+    assert.strictEqual(cafe2Check.status, 200);
+    assert.strictEqual(cafe2Check.body.cafe.taxRate, 10.0);
+    assert.strictEqual(cafe2Check.body.cafe.taxName, 'VAT');
   });
 });
 

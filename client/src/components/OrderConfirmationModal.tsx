@@ -116,6 +116,13 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
             </div>
           ) : null}
 
+          {order.tax > 0 ? (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.35rem', color: '#64748b', fontSize: '0.85rem' }}>
+              <span>{order.taxName || 'Tax'} ({order.taxRate ? `${order.taxRate}%` : 'Regional'})</span>
+              <span>{currencySymbol}{(order.tax / 100).toFixed(2)}</span>
+            </div>
+          ) : null}
+
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem', fontWeight: 800, fontSize: '1.05rem' }}>
             <span>Total Confirmed</span>
             <span style={{ color: '#059669' }}>

@@ -11,6 +11,8 @@ export interface Cafe {
   phone: string;
   currency: string;
   currencySymbol: string;
+  taxRate: number; // Regional tax percentage (e.g. 8.25 for 8.25%)
+  taxName: string; // e.g. 'Sales Tax', 'VAT', 'GST'
   isOpen: boolean;
   pauseReason?: string;
   createdAt: string;
@@ -64,6 +66,8 @@ export interface Order {
   promoCode?: string;
   tip?: number; // in cents (gratuity)
   tax: number;
+  taxRate?: number; // Snapshot tax rate percentage at order time
+  taxName?: string; // Snapshot tax label at order time
   total: number;
   feedback?: {
     rating: number;

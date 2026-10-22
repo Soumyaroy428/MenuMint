@@ -13,6 +13,8 @@ class Database {
       phone: '+1 (555) 234-5678',
       currency: 'USD',
       currencySymbol: '$',
+      taxRate: 8.25,
+      taxName: 'Sales Tax',
       isOpen: true,
       createdAt: new Date().toISOString(),
     },
@@ -23,8 +25,10 @@ class Database {
       description: 'Authentic Italian espresso, paninis, and gelato.',
       address: '42 Harbor View Ave',
       phone: '+1 (555) 987-6543',
-      currency: 'USD',
-      currencySymbol: '$',
+      currency: 'EUR',
+      currencySymbol: '€',
+      taxRate: 10.0,
+      taxName: 'VAT',
       isOpen: true,
       createdAt: new Date().toISOString(),
     },
@@ -346,6 +350,34 @@ class Database {
       return cafe;
     }
     return undefined;
+  }
+
+  updateCafeSettings(
+    cafeId: string,
+    settings: {
+      taxRate?: number;
+      taxName?: string;
+      currency?: string;
+      currencySymbol?: string;
+    }
+  ): Cafe | undefined {
+    const cafe = this.cafes.find((c) => c.id === cafeId);
+    if (!cafe) return undefined;
+
+    if (settings.taxRate !== undefined) {
+      cafe.taxRate = settings.taxRate;
+    }
+    if (settings.taxName !== undefined) {
+      cafe.taxName = settings.taxName.trim();
+    }
+    if (settings.currency !== undefined) {
+      cafe.currency = settings.currency.trim().toUpperCase();
+    }
+    if (settings.currencySymbol !== undefined) {
+      cafe.currencySymbol = settings.currencySymbol.trim();
+    }
+
+    return cafe;
   }
 
   getCategoriesByCafeId(cafeId: string): MenuCategory[] {

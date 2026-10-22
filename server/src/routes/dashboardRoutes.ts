@@ -456,6 +456,79 @@ dashboardRouter.get('/feedback', (req: AuthenticatedRequest, res: Response): voi
   });
 });
 
+// 16. Update café settings: Tax rate, Tax label, Currency & Currency Symbol (CP-38)
+dashboardRouter.patch('/cafe/settings', (req: AuthenticatedRequest, res: Response): void => {
+  const cafeId = req.user!.cafeId;
+  const { taxRate, taxName, currency, currencySymbol } = req.body;
+
+  const updates: {
+    taxRate?: number;
+    taxName?: string;
+    currency?: string;
+    currencySymbol?: string;
+  } = {};
+
+  if (taxRate !== undefined) {
+    const numericRate = Number(taxRate);
+    if (isNaN(numericRate) || numericRate < 0 || numericRate > 50) {
+      res.status(400).json({
+        error: 'Validation Error',
+        message: 'Tax rate must be a valid number between 0% and 50%.',
+      });
+      return;
+    }
+    updates.taxRate = Math.round(numericRate * 100) / 100;
+  }
+
+  if (taxName !== undefined) {
+    if (typeof taxName !== 'string' || taxName.trim().length === 0 || taxName.trim().length > 30) {
+      res.status(400).json({
+        error: 'Validation Error',
+        message: 'Tax name must be a string between 1 and 30 characters.',
+      });
+      return;
+    }
+    updates.taxName = taxName.trim();
+  }
+
+  if (currency !== undefined) {
+    if (typeof currency !== 'string' || currency.trim().length < 2 || currency.trim().length > 6) {
+      res.status(400).json({
+        error: 'Validation Error',
+        message: 'Currency code must be between 2 and 6 characters (e.g. USD, EUR, GBP).',
+      });
+      return;
+    }
+    updates.currency = currency.trim().toUpperCase();
+  }
+
+  if (currencySymbol !== undefined) {
+    if (typeof currencySymbol !== 'string' || currencySymbol.trim().length === 0 || currencySymbol.trim().length > 5) {
+      res.status(400).json({
+        error: 'Validation Error',
+        message: 'Currency symbol must be between 1 and 5 characters (e.g. $, €, £).',
+      });
+      return;
+    }
+    updates.currencySymbol = currencySymbol.trim();
+  }
+
+  const updatedCafe = db.updateCafeSettings(cafeId, updates);
+  if (!updatedCafe) {
+    res.status(404).json({
+      error: 'Not Found',
+      message: 'Café not found.',
+    });
+    return;
+  }
+
+  res.json({
+    success: true,
+    message: 'Café regional tax and currency settings updated successfully.',
+    cafe: updatedCafe,
+  });
+});
+
 
 
 

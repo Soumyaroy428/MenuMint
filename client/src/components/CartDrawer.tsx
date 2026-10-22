@@ -13,6 +13,8 @@ interface CartDrawerProps {
   currencySymbol: string;
   cafeSlug: string;
   defaultTable?: string;
+  taxRate?: number;
+  taxName?: string;
   isStoreOpen?: boolean;
   storePauseReason?: string;
   onOrderSuccess: (order: Order) => void;
@@ -28,6 +30,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   currencySymbol,
   cafeSlug,
   defaultTable,
+  taxRate,
+  taxName,
   isStoreOpen = true,
   storePauseReason,
   onOrderSuccess,
@@ -59,7 +63,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const rawSubtotal = items.reduce((acc, ci) => acc + ci.item.price * ci.quantity, 0);
   const discountAmount = appliedPromo ? Math.min(rawSubtotal, appliedPromo.discountAmount) : 0;
   const subtotal = Math.max(0, rawSubtotal - discountAmount);
-  const estimatedTax = Math.round(subtotal * 0.05);
+  const effectiveTaxRate = typeof taxRate === 'number' ? taxRate : 8.25;
+  const effectiveTaxName = taxName || 'Estimated Tax';
+  const estimatedTax = Math.round((subtotal * effectiveTaxRate) / 100);
 
   let tipAmount = 0;
   if (tipType === '10') {
@@ -424,7 +430,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 </div>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', marginBottom: 4 }}>
-                <span>Estimated Tax (5%)</span>
+                <span>{effectiveTaxName} ({effectiveTaxRate}%)</span>
                 <span>{currencySymbol}{(estimatedTax / 100).toFixed(2)}</span>
               </div>
               {tipAmount > 0 && (

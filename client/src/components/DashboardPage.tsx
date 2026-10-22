@@ -17,6 +17,7 @@ import {
   fetchDashboardCafe,
   updateDashboardCafeStatus,
   fetchDashboardFeedbacks,
+  updateDashboardCafeSettings,
 } from '../api';
 import {
   Lock,
@@ -47,6 +48,7 @@ import {
   Pause,
   Play,
   Star,
+  Percent,
 } from 'lucide-react';
 
 interface DashboardPageProps {
@@ -110,6 +112,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
   const [isStoreModalOpen, setIsStoreModalOpen] = useState(false);
   const [pauseReasonInput, setPauseReasonInput] = useState('');
   const [updatingStoreStatus, setUpdatingStoreStatus] = useState(false);
+
+  // Regional Tax & Currency Settings (CP-38)
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [settingsTaxRate, setSettingsTaxRate] = useState('');
+  const [settingsTaxName, setSettingsTaxName] = useState('');
+  const [settingsCurrency, setSettingsCurrency] = useState('');
+  const [settingsCurrencySymbol, setSettingsCurrencySymbol] = useState('');
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
 
   const playOrderChime = () => {
     if (!soundEnabled) return;
@@ -204,6 +215,50 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
       alert(err.message || 'Failed to update store status');
     } finally {
       setUpdatingStoreStatus(false);
+    }
+  };
+
+  const handleOpenSettingsModal = () => {
+    setSettingsTaxRate(String(cafeProfile?.taxRate ?? 8.25));
+    setSettingsTaxName(cafeProfile?.taxName || 'Sales Tax');
+    setSettingsCurrency(cafeProfile?.currency || 'USD');
+    setSettingsCurrencySymbol(cafeProfile?.currencySymbol || '$');
+    setSettingsError(null);
+    setIsSettingsModalOpen(true);
+  };
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
+    const rateNum = Number(settingsTaxRate);
+    if (isNaN(rateNum) || rateNum < 0 || rateNum > 50) {
+      setSettingsError('Tax rate must be between 0% and 50%.');
+      return;
+    }
+    if (!settingsTaxName.trim()) {
+      setSettingsError('Tax label is required.');
+      return;
+    }
+    setSettingsSaving(true);
+    setSettingsError(null);
+    try {
+      const updated = await updateDashboardCafeSettings(token, {
+        taxRate: rateNum,
+        taxName: settingsTaxName.trim(),
+        currency: settingsCurrency.trim().toUpperCase(),
+        currencySymbol: settingsCurrencySymbol.trim(),
+      });
+      setCafeProfile(updated);
+      if (currentUser) {
+        const updatedUser = { ...currentUser, currencySymbol: updated.currencySymbol };
+        setCurrentUser(updatedUser);
+        localStorage.setItem('menumint_user', JSON.stringify(updatedUser));
+      }
+      setIsSettingsModalOpen(false);
+    } catch (err: any) {
+      setSettingsError(err.message || 'Failed to update store settings.');
+    } finally {
+      setSettingsSaving(false);
     }
   };
 
@@ -753,6 +808,18 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
               <Pause size={14} /> Pause Incoming Orders
             </button>
           )}
+
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={handleOpenSettingsModal}
+            title="Configure regional tax rate and currency"
+          >
+            <Percent size={14} color="#059669" />
+            <span>
+              {cafeProfile?.taxName || 'Sales Tax'}: {cafeProfile?.taxRate ?? 8.25}% • {cafeProfile?.currency || 'USD'} ({cafeProfile?.currencySymbol || '$'})
+            </span>
+          </button>
         </div>
       </div>
 
@@ -1840,6 +1907,148 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
                 {updatingStoreStatus ? 'Pausing...' : 'Confirm Pause Orders'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Regional Tax & Currency Settings Modal (CP-38) */}
+      {isSettingsModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsSettingsModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Percent size={20} color="#059669" />
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Regional Tax & Currency</h2>
+              </div>
+              <button onClick={() => setIsSettingsModalOpen(false)} style={{ color: '#94a3b8' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1rem' }}>
+              Configure tax compliance labels (e.g. Sales Tax, VAT, GST) and regional currency. Changes immediately reflect in customer cart calculations and receipts.
+            </p>
+
+            {settingsError && (
+              <div style={{ background: '#fee2e2', color: '#991b1b', padding: '0.6rem 0.8rem', borderRadius: 8, fontSize: '0.82rem', marginBottom: '1rem' }}>
+                {settingsError}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveSettings}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Tax Label *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Sales Tax, VAT, GST"
+                    className="form-input"
+                    value={settingsTaxName}
+                    onChange={(e) => setSettingsTaxName(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Tax Rate (%) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="50"
+                    required
+                    placeholder="e.g. 8.25"
+                    className="form-input"
+                    value={settingsTaxRate}
+                    onChange={(e) => setSettingsTaxRate(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Currency Code *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="USD, EUR, GBP"
+                    className="form-input"
+                    style={{ textTransform: 'uppercase' }}
+                    value={settingsCurrency}
+                    onChange={(e) => setSettingsCurrency(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Currency Symbol *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="$, €, £"
+                    className="form-input"
+                    value={settingsCurrencySymbol}
+                    onChange={(e) => setSettingsCurrencySymbol(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Live Preview Box */}
+              <div
+                style={{
+                  background: '#f8fafc',
+                  border: '1px dashed #cbd5e1',
+                  borderRadius: 8,
+                  padding: '0.85rem 1rem',
+                  marginBottom: '1.25rem',
+                }}
+              >
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: '0.4rem' }}>
+                  Live Checkout Calculation Preview:
+                </div>
+                {(() => {
+                  const rate = Number(settingsTaxRate) || 0;
+                  const sampleSubtotal = 1000; // $10.00
+                  const sampleTax = Math.round((sampleSubtotal * rate) / 100);
+                  const sampleTotal = sampleSubtotal + sampleTax;
+                  const sym = settingsCurrencySymbol || '$';
+                  return (
+                    <div style={{ fontSize: '0.82rem', color: '#334155' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                        <span>Sample Subtotal:</span>
+                        <span>{sym}10.00</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2, color: '#059669', fontWeight: 600 }}>
+                        <span>{settingsTaxName || 'Tax'} ({rate}%):</span>
+                        <span>+{sym}{(sampleTax / 100).toFixed(2)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: 4, fontWeight: 700 }}>
+                        <span>Customer Total:</span>
+                        <span>{sym}{(sampleTotal / 100).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
+                  onClick={() => setIsSettingsModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ flex: 1 }}
+                  disabled={settingsSaving}
+                >
+                  {settingsSaving ? 'Saving...' : 'Save Settings'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

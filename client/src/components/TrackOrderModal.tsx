@@ -156,6 +156,12 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
               <span>+${currencySymbol}${(order.tip / 100).toFixed(2)}</span>
             </div>
           ` : ''}
+          ${order.tax && order.tax > 0 ? `
+            <div class="row" style="color: #666;">
+              <span>${order.taxName || 'Tax'} (${order.taxRate ? `${order.taxRate}%` : 'Tax'}):</span>
+              <span>${currencySymbol}${(order.tax / 100).toFixed(2)}</span>
+            </div>
+          ` : ''}
           <div class="total-row">
             <span>TOTAL PAID:</span>
             <span>${currencySymbol}${(order.total / 100).toFixed(2)}</span>
@@ -348,6 +354,12 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '2px 0', color: '#059669', fontWeight: 600 }}>
                   <span>Staff Tip</span>
                   <span>+ {currencySymbol}{(order.tip / 100).toFixed(2)}</span>
+                </div>
+              ) : null}
+              {order.tax && order.tax > 0 ? (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '2px 0', color: '#64748b' }}>
+                  <span>{order.taxName || 'Tax'} ({order.taxRate ? `${order.taxRate}%` : 'Regional'})</span>
+                  <span>{currencySymbol}{(order.tax / 100).toFixed(2)}</span>
                 </div>
               ) : null}
             </div>
