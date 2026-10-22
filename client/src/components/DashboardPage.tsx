@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Order, MenuItem, MenuCategory, OrderStatus, AnalyticsSummary, PromoCode, Cafe, DietaryTag, OrderFeedback } from '../types';
+import { User, Order, MenuItem, MenuCategory, OrderStatus, AnalyticsSummary, PromoCode, Cafe, DietaryTag, OrderFeedback, PrepStation } from '../types';
 import {
   loginOwner,
   fetchDashboardOrders,
@@ -79,6 +79,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
   const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
   const [loadingData, setLoadingData] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [stationFilter, setStationFilter] = useState<'all' | 'BARISTA' | 'KITCHEN' | 'BAKERY'>('all');
   const [orderSearch, setOrderSearch] = useState<string>('');
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -97,6 +98,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
   const [itemDescription, setItemDescription] = useState('');
   const [itemImageUrl, setItemImageUrl] = useState('');
   const [itemDietaryTags, setItemDietaryTags] = useState<DietaryTag[]>([]);
+  const [itemPrepStation, setItemPrepStation] = useState<PrepStation>('BARISTA');
   const [itemSaving, setItemSaving] = useState(false);
 
   // Promo Code Modal State
@@ -320,6 +322,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
     setItemDescription('');
     setItemImageUrl('');
     setItemDietaryTags([]);
+    setItemPrepStation('BARISTA');
     setIsItemModalOpen(true);
   };
 
@@ -331,6 +334,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
     setItemDescription(item.description || '');
     setItemImageUrl(item.imageUrl || '');
     setItemDietaryTags(item.dietaryTags || []);
+    setItemPrepStation(item.prepStation || 'BARISTA');
     setIsItemModalOpen(true);
   };
 
@@ -360,6 +364,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
           description: itemDescription.trim(),
           imageUrl: itemImageUrl.trim(),
           dietaryTags: itemDietaryTags,
+          prepStation: itemPrepStation,
         });
         setMenuItems((prev) => prev.map((i) => (i.id === editingItem.id ? updated : i)));
       } else {
@@ -370,6 +375,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
           description: itemDescription.trim(),
           imageUrl: itemImageUrl.trim(),
           dietaryTags: itemDietaryTags,
+          prepStation: itemPrepStation,
         });
         setMenuItems((prev) => [...prev, created]);
       }
@@ -651,9 +657,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
     document.body.removeChild(link);
   };
 
-  // Filter orders with status and search term
+  // Filter orders with status, prep station routing, and search term (CP-39)
   const filteredOrders = orders.filter((o) => {
     const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
+    const matchesStation =
+      stationFilter === 'all' ||
+      o.items.some((i) => (i.prepStation || 'BARISTA') === stationFilter);
     const q = orderSearch.toLowerCase().trim();
     const matchesSearch =
       !q ||
@@ -661,8 +670,18 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
       o.customerName.toLowerCase().includes(q) ||
       (o.tableNumber && o.tableNumber.toLowerCase().includes(q)) ||
       (o.customerPhone && o.customerPhone.toLowerCase().includes(q));
-    return matchesStatus && matchesSearch;
+    return matchesStatus && matchesStation && matchesSearch;
   });
+
+  const baristaCount = orders.filter((o) =>
+    o.items.some((i) => (i.prepStation || 'BARISTA') === 'BARISTA')
+  ).length;
+  const kitchenCount = orders.filter((o) =>
+    o.items.some((i) => i.prepStation === 'KITCHEN')
+  ).length;
+  const bakeryCount = orders.filter((o) =>
+    o.items.some((i) => i.prepStation === 'BAKERY')
+  ).length;
 
   const totalRevenue = orders
     .filter((o) => o.status !== 'CANCELLED')
@@ -917,6 +936,66 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
             </button>
           </div>
 
+          {/* Prep Station Routing Filter Bar (CP-39) */}
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: '0.5rem',
+              marginBottom: '0.75rem',
+              padding: '0.5rem 0.75rem',
+              background: '#f8fafc',
+              borderRadius: 10,
+              border: '1px solid #e2e8f0',
+            }}
+          >
+            <span
+              style={{
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                color: '#64748b',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                marginRight: '0.25rem',
+              }}
+            >
+              Prep Station:
+            </span>
+            <button
+              type="button"
+              className={`btn btn-sm ${stationFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ fontSize: '0.78rem', padding: '0.25rem 0.65rem' }}
+              onClick={() => setStationFilter('all')}
+            >
+              All Stations ({orders.length})
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${stationFilter === 'BARISTA' ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ fontSize: '0.78rem', padding: '0.25rem 0.65rem' }}
+              onClick={() => setStationFilter('BARISTA')}
+            >
+              ☕ Barista ({baristaCount})
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${stationFilter === 'KITCHEN' ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ fontSize: '0.78rem', padding: '0.25rem 0.65rem' }}
+              onClick={() => setStationFilter('KITCHEN')}
+            >
+              🍳 Kitchen Grill ({kitchenCount})
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${stationFilter === 'BAKERY' ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ fontSize: '0.78rem', padding: '0.25rem 0.65rem' }}
+              onClick={() => setStationFilter('BAKERY')}
+            >
+              🥐 Bakery ({bakeryCount})
+            </button>
+          </div>
+
           {/* Status Filters */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '1.25rem' }}>
             {['all', 'PENDING', 'ACCEPTED', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED'].map((st) => (
@@ -988,26 +1067,59 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
 
                     <table className="order-items-table">
                       <tbody>
-                        {ord.items.map((item, idx) => (
-                          <tr key={idx}>
-                            <td style={{ fontWeight: 600, verticalAlign: 'top' }}>{item.quantity}x</td>
-                            <td>
-                              <div>{item.name}</div>
-                              {item.dietaryTags && item.dietaryTags.length > 0 && (
-                                <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 2 }}>
-                                  {item.dietaryTags.map((t) => (
-                                    <span key={t} style={{ fontSize: '0.62rem', padding: '0 4px', borderRadius: 4, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0' }}>
-                                      {t === 'VEGAN' ? '🌱 Vegan' : t === 'VEGETARIAN' ? '🥗 Veg' : t === 'GLUTEN_FREE' ? '🌾 GF' : t === 'NUT_FREE' ? '🥜 Nut-Free' : t === 'SPICY' ? '🌶️ Spicy' : '⭐ Pick'}
-                                    </span>
-                                  ))}
+                        {ord.items.map((item, idx) => {
+                          const itemStation = item.prepStation || 'BARISTA';
+                          const isStationMatch = stationFilter === 'all' || itemStation === stationFilter;
+                          const stationBadge =
+                            itemStation === 'KITCHEN'
+                              ? { label: '🍳 Kitchen', bg: '#fff7ed', color: '#c2410c', border: '#ffedd5' }
+                              : itemStation === 'BAKERY'
+                              ? { label: '🥐 Bakery', bg: '#fefce8', color: '#a16207', border: '#fef9c3' }
+                              : { label: '☕ Barista', bg: '#eff6ff', color: '#1d4ed8', border: '#dbeafe' };
+
+                          return (
+                            <tr
+                              key={idx}
+                              style={{
+                                opacity: isStationMatch ? 1 : 0.45,
+                                transition: 'opacity 0.2s ease',
+                                background: isStationMatch && stationFilter !== 'all' ? '#f0fdf4' : 'transparent',
+                              }}
+                            >
+                              <td style={{ fontWeight: 600, verticalAlign: 'top' }}>{item.quantity}x</td>
+                              <td>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                                  <span style={{ fontWeight: isStationMatch ? 600 : 400 }}>{item.name}</span>
+                                  <span
+                                    style={{
+                                      fontSize: '0.62rem',
+                                      padding: '1px 5px',
+                                      borderRadius: 4,
+                                      background: stationBadge.bg,
+                                      color: stationBadge.color,
+                                      border: `1px solid ${stationBadge.border}`,
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    {stationBadge.label}
+                                  </span>
                                 </div>
-                              )}
-                            </td>
-                            <td style={{ textAlign: 'right', fontWeight: 600, verticalAlign: 'top' }}>
-                              {currentUser.currencySymbol}{(item.lineTotal / 100).toFixed(2)}
-                            </td>
-                          </tr>
-                        ))}
+                                {item.dietaryTags && item.dietaryTags.length > 0 && (
+                                  <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 2 }}>
+                                    {item.dietaryTags.map((t) => (
+                                      <span key={t} style={{ fontSize: '0.62rem', padding: '0 4px', borderRadius: 4, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0' }}>
+                                        {t === 'VEGAN' ? '🌱 Vegan' : t === 'VEGETARIAN' ? '🥗 Veg' : t === 'GLUTEN_FREE' ? '🌾 GF' : t === 'NUT_FREE' ? '🥜 Nut-Free' : t === 'SPICY' ? '🌶️ Spicy' : '⭐ Pick'}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </td>
+                              <td style={{ textAlign: 'right', fontWeight: 600, verticalAlign: 'top' }}>
+                                {currentUser.currencySymbol}{(item.lineTotal / 100).toFixed(2)}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
 
@@ -1151,6 +1263,39 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
                       <strong style={{ fontSize: '1rem' }}>{item.name}</strong>
                       <span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>
                         {category?.name || 'Item'}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '0.68rem',
+                          padding: '1px 6px',
+                          borderRadius: 4,
+                          background:
+                            (item.prepStation || 'BARISTA') === 'KITCHEN'
+                              ? '#fff7ed'
+                              : (item.prepStation || 'BARISTA') === 'BAKERY'
+                              ? '#fefce8'
+                              : '#eff6ff',
+                          color:
+                            (item.prepStation || 'BARISTA') === 'KITCHEN'
+                              ? '#c2410c'
+                              : (item.prepStation || 'BARISTA') === 'BAKERY'
+                              ? '#a16207'
+                              : '#1d4ed8',
+                          border: `1px solid ${
+                            (item.prepStation || 'BARISTA') === 'KITCHEN'
+                              ? '#ffedd5'
+                              : (item.prepStation || 'BAKERY') === 'BAKERY'
+                              ? '#fef9c3'
+                              : '#dbeafe'
+                          }`,
+                          fontWeight: 600,
+                        }}
+                      >
+                        {(item.prepStation || 'BARISTA') === 'KITCHEN'
+                          ? '🍳 Kitchen Grill'
+                          : (item.prepStation || 'BAKERY') === 'BAKERY'
+                          ? '🥐 Bakery'
+                          : '☕ Barista'}
                       </span>
                       {item.dietaryTags && item.dietaryTags.map((tag) => (
                         <span key={tag} className="badge" style={{ fontSize: '0.65rem', background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0' }}>
@@ -1646,6 +1791,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
                     onChange={(e) => setItemPrice(e.target.value)}
                   />
                 </div>
+              </div>
+
+              {/* Kitchen Prep Station Selector (CP-39) */}
+              <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                <label className="form-label">Kitchen Prep Station *</label>
+                <select
+                  className="form-input"
+                  value={itemPrepStation}
+                  onChange={(e) => setItemPrepStation(e.target.value as PrepStation)}
+                >
+                  <option value="BARISTA">☕ Barista Station (Espresso & Beverages)</option>
+                  <option value="KITCHEN">🍳 Kitchen Grill (Hot Food & Mains)</option>
+                  <option value="BAKERY">🥐 Bakery & Pastry (Baked Goods)</option>
+                </select>
               </div>
 
               <div className="form-group">

@@ -1,4 +1,4 @@
-import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, OrderFeedback } from './types.js';
+import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, OrderFeedback, PrepStation } from './types.js';
 import bcrypt from 'bcryptjs';
 
 // Pre-seeded database in memory with consistent IDs and tenant isolation
@@ -54,6 +54,7 @@ class Database {
       imageUrl: 'https://images.unsplash.com/photo-1577968897966-3d4325b36b61?auto=format&fit=crop&w=600&q=80',
       isAvailable: true,
       dietaryTags: ['VEGETARIAN', 'CHEF_SPECIAL'],
+      prepStation: 'BARISTA',
       createdAt: new Date().toISOString(),
     },
     {
@@ -66,6 +67,7 @@ class Database {
       imageUrl: 'https://images.unsplash.com/photo-1534778101976-62847782c213?auto=format&fit=crop&w=600&q=80',
       isAvailable: true,
       dietaryTags: ['VEGETARIAN'],
+      prepStation: 'BARISTA',
       createdAt: new Date().toISOString(),
     },
     {
@@ -78,6 +80,7 @@ class Database {
       imageUrl: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=600&q=80',
       isAvailable: true,
       dietaryTags: ['VEGETARIAN', 'GLUTEN_FREE'],
+      prepStation: 'BARISTA',
       createdAt: new Date().toISOString(),
     },
     {
@@ -90,6 +93,7 @@ class Database {
       imageUrl: 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?auto=format&fit=crop&w=600&q=80',
       isAvailable: true,
       dietaryTags: ['VEGAN', 'GLUTEN_FREE', 'CHEF_SPECIAL'],
+      prepStation: 'BARISTA',
       createdAt: new Date().toISOString(),
     },
     {
@@ -102,6 +106,7 @@ class Database {
       imageUrl: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?auto=format&fit=crop&w=600&q=80',
       isAvailable: true,
       dietaryTags: ['VEGAN', 'GLUTEN_FREE'],
+      prepStation: 'BARISTA',
       createdAt: new Date().toISOString(),
     },
     {
@@ -114,6 +119,7 @@ class Database {
       imageUrl: 'https://images.unsplash.com/photo-1555507036-ab1f4038808a?auto=format&fit=crop&w=600&q=80',
       isAvailable: true,
       dietaryTags: ['VEGETARIAN'],
+      prepStation: 'BAKERY',
       createdAt: new Date().toISOString(),
     },
     {
@@ -126,6 +132,7 @@ class Database {
       imageUrl: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=600&q=80',
       isAvailable: false, // Intentionally unavailable for CP-10 verification!
       dietaryTags: ['VEGETARIAN'],
+      prepStation: 'BAKERY',
       createdAt: new Date().toISOString(),
     },
     {
@@ -138,6 +145,7 @@ class Database {
       imageUrl: 'https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=600&q=80',
       isAvailable: true,
       dietaryTags: ['VEGETARIAN', 'CHEF_SPECIAL'],
+      prepStation: 'KITCHEN',
       createdAt: new Date().toISOString(),
     },
     {
@@ -150,6 +158,7 @@ class Database {
       imageUrl: 'https://images.unsplash.com/photo-1484723091739-0045614eb6c7?auto=format&fit=crop&w=600&q=80',
       isAvailable: true,
       dietaryTags: ['VEGETARIAN'],
+      prepStation: 'KITCHEN',
       createdAt: new Date().toISOString(),
     },
     // Cafe 2 item for tenant isolation testing
@@ -163,6 +172,7 @@ class Database {
       imageUrl: '',
       isAvailable: true,
       dietaryTags: ['VEGAN', 'GLUTEN_FREE'],
+      prepStation: 'BARISTA',
       createdAt: new Date().toISOString(),
     },
   ];
@@ -184,6 +194,7 @@ class Database {
           unitPrice: 475,
           quantity: 2,
           lineTotal: 950,
+          prepStation: 'BARISTA',
         },
         {
           menuItemId: 'item-6',
@@ -191,6 +202,7 @@ class Database {
           unitPrice: 495,
           quantity: 1,
           lineTotal: 495,
+          prepStation: 'BAKERY',
         },
       ],
       subtotal: 1445,
@@ -215,6 +227,7 @@ class Database {
           unitPrice: 550,
           quantity: 1,
           lineTotal: 550,
+          prepStation: 'BARISTA',
         },
       ],
       subtotal: 550,
@@ -239,6 +252,7 @@ class Database {
           unitPrice: 350,
           quantity: 1,
           lineTotal: 350,
+          prepStation: 'BARISTA',
         },
       ],
       subtotal: 350,

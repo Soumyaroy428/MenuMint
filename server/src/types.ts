@@ -28,6 +28,8 @@ export interface MenuCategory {
 
 export type DietaryTag = 'VEGAN' | 'VEGETARIAN' | 'GLUTEN_FREE' | 'NUT_FREE' | 'SPICY' | 'CHEF_SPECIAL';
 
+export type PrepStation = 'BARISTA' | 'KITCHEN' | 'BAKERY';
+
 export interface MenuItem {
   id: string;
   cafeId: string;
@@ -38,6 +40,7 @@ export interface MenuItem {
   imageUrl: string;
   isAvailable: boolean;
   dietaryTags?: DietaryTag[];
+  prepStation?: PrepStation;
   createdAt: string;
 }
 
@@ -48,6 +51,7 @@ export interface OrderItemSnapshot {
   quantity: number;
   lineTotal: number;
   dietaryTags?: DietaryTag[];
+  prepStation?: PrepStation;
 }
 
 export interface Order {

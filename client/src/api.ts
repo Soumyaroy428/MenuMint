@@ -1,4 +1,4 @@
-import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, DietaryTag, OrderFeedback } from './types';
+import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, DietaryTag, OrderFeedback, PrepStation } from './types';
 
 const API_BASE = '/api';
 
@@ -68,8 +68,11 @@ export async function loginOwner(email: string, password: string): Promise<{ tok
   return data;
 }
 
-export async function fetchDashboardOrders(token: string): Promise<Order[]> {
-  const res = await fetch(`${API_BASE}/dashboard/orders`, {
+export async function fetchDashboardOrders(token: string, station?: string): Promise<Order[]> {
+  const url = station && station !== 'all'
+    ? `${API_BASE}/dashboard/orders?station=${encodeURIComponent(station)}`
+    : `${API_BASE}/dashboard/orders`;
+  const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
@@ -127,7 +130,7 @@ export async function toggleItemAvailability(token: string, itemId: string, isAv
 
 export async function createMenuItem(
   token: string,
-  itemData: { name: string; categoryId: string; price: number; description?: string; imageUrl?: string; dietaryTags?: DietaryTag[] }
+  itemData: { name: string; categoryId: string; price: number; description?: string; imageUrl?: string; dietaryTags?: DietaryTag[]; prepStation?: PrepStation }
 ): Promise<MenuItem> {
   const res = await fetch(`${API_BASE}/dashboard/items`, {
     method: 'POST',
@@ -148,7 +151,7 @@ export async function createMenuItem(
 export async function updateMenuItem(
   token: string,
   itemId: string,
-  updates: { name?: string; categoryId?: string; price?: number; description?: string; imageUrl?: string; isAvailable?: boolean; dietaryTags?: DietaryTag[] }
+  updates: { name?: string; categoryId?: string; price?: number; description?: string; imageUrl?: string; isAvailable?: boolean; dietaryTags?: DietaryTag[]; prepStation?: PrepStation }
 ): Promise<MenuItem> {
   const res = await fetch(`${API_BASE}/dashboard/items/${itemId}`, {
     method: 'PUT',

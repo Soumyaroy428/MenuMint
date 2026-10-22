@@ -818,6 +818,134 @@ describe('MenuMint API Test Suite', () => {
     assert.strictEqual(cafe2Check.body.cafe.taxRate, 10.0);
     assert.strictEqual(cafe2Check.body.cafe.taxName, 'VAT');
   });
+
+  // -------------------------------------------------------------
+  // CP-39: Kitchen Station Routing & Split Prep View Engine
+  // -------------------------------------------------------------
+  test('CP-39: POST /api/dashboard/items should persist prepStation and fallback safely', async () => {
+    // 1. Create item with KITCHEN prep station (price in minor units/cents)
+    const res1 = await request(app)
+      .post('/api/dashboard/items')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        name: 'Avocado Toast with Poached Egg',
+        categoryId: 'cat-2',
+        price: 950,
+        description: 'Sourdough toast with mashed avocado and organic poached egg',
+        prepStation: 'KITCHEN',
+      });
+
+    assert.strictEqual(res1.status, 201);
+    assert.strictEqual(res1.body.item.name, 'Avocado Toast with Poached Egg');
+    assert.strictEqual(res1.body.item.prepStation, 'KITCHEN');
+
+    // 2. Create item without prepStation (defaults to BARISTA)
+    const res2 = await request(app)
+      .post('/api/dashboard/items')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        name: 'Iced Matcha Latte',
+        categoryId: 'cat-1',
+        price: 575,
+        description: 'Ceremonial grade matcha with oat milk',
+      });
+
+    assert.strictEqual(res2.status, 201);
+    assert.strictEqual(res2.body.item.prepStation, 'BARISTA');
+
+    // 3. Update prepStation via PUT /api/dashboard/items/:id
+    const itemId = res2.body.item.id;
+    const resUpdate = await request(app)
+      .put(`/api/dashboard/items/${itemId}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        prepStation: 'BAKERY',
+      });
+
+    assert.strictEqual(resUpdate.status, 200);
+    assert.strictEqual(resUpdate.body.item.prepStation, 'BAKERY');
+  });
+
+  test('CP-39: POST /api/orders should snapshot prepStation on each order item', async () => {
+    // Place order with item-1 (BARISTA) and item-8 (KITCHEN)
+    const res = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        customerName: 'Gordon Ramsay',
+        orderType: 'dine-in',
+        tableNumber: 'Chef Table',
+        items: [
+          { menuItemId: 'item-1', quantity: 1 },
+          { menuItemId: 'item-8', quantity: 2 },
+        ],
+      });
+
+    assert.strictEqual(res.status, 201);
+    const order = res.body.order;
+    assert.strictEqual(order.items.length, 2);
+
+    const baristaItem = order.items.find((i: any) => i.menuItemId === 'item-1');
+    assert.ok(baristaItem);
+    assert.strictEqual(baristaItem.prepStation, 'BARISTA');
+
+    const kitchenItem = order.items.find((i: any) => i.menuItemId === 'item-8');
+    assert.ok(kitchenItem);
+    assert.strictEqual(kitchenItem.prepStation, 'KITCHEN');
+
+    // Verify snapshot persistence on GET /api/orders/:orderRef
+    const getRes = await request(app).get(`/api/orders/${order.orderRef}`);
+    assert.strictEqual(getRes.status, 200);
+    assert.strictEqual(getRes.body.order.items[0].prepStation, baristaItem.prepStation);
+    assert.strictEqual(getRes.body.order.items[1].prepStation, kitchenItem.prepStation);
+  });
+
+  test('CP-39: GET /api/dashboard/orders?station=X should filter orders by station and maintain tenant isolation', async () => {
+    // 1. Fetch BARISTA orders for Cafe 1
+    const baristaRes = await request(app)
+      .get('/api/dashboard/orders?station=BARISTA')
+      .set('Authorization', `Bearer ${ownerToken}`);
+
+    assert.strictEqual(baristaRes.status, 200);
+    assert.ok(Array.isArray(baristaRes.body.orders));
+    assert.ok(baristaRes.body.orders.length > 0);
+    for (const ord of baristaRes.body.orders) {
+      assert.strictEqual(ord.cafeId, 'cafe-1');
+      assert.ok(ord.items.some((i: any) => (i.prepStation || 'BARISTA') === 'BARISTA'));
+    }
+
+    // 2. Fetch KITCHEN orders for Cafe 1
+    const kitchenRes = await request(app)
+      .get('/api/dashboard/orders?station=KITCHEN')
+      .set('Authorization', `Bearer ${ownerToken}`);
+
+    assert.strictEqual(kitchenRes.status, 200);
+    assert.ok(Array.isArray(kitchenRes.body.orders));
+    for (const ord of kitchenRes.body.orders) {
+      assert.strictEqual(ord.cafeId, 'cafe-1');
+      assert.ok(ord.items.some((i: any) => i.prepStation === 'KITCHEN'));
+    }
+
+    // 3. Fetch BAKERY orders for Cafe 1
+    const bakeryRes = await request(app)
+      .get('/api/dashboard/orders?station=BAKERY')
+      .set('Authorization', `Bearer ${ownerToken}`);
+
+    assert.strictEqual(bakeryRes.status, 200);
+    assert.ok(Array.isArray(bakeryRes.body.orders));
+    for (const ord of bakeryRes.body.orders) {
+      assert.strictEqual(ord.cafeId, 'cafe-1');
+      assert.ok(ord.items.some((i: any) => i.prepStation === 'BAKERY'));
+    }
+
+    // 4. Station=all returns all orders
+    const allRes = await request(app)
+      .get('/api/dashboard/orders?station=all')
+      .set('Authorization', `Bearer ${ownerToken}`);
+
+    assert.strictEqual(allRes.status, 200);
+    assert.ok(allRes.body.orders.length >= baristaRes.body.orders.length);
+  });
 });
 
 

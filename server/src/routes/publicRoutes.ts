@@ -201,6 +201,7 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
       quantity,
       lineTotal,
       dietaryTags: authenticItem.dietaryTags,
+      prepStation: authenticItem.prepStation || 'BARISTA',
     });
   }
 

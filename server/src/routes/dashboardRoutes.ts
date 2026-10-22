@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { db } from '../db.js';
 import { authenticateOwner, AuthenticatedRequest } from '../auth.js';
-import { OrderStatus } from '../types.js';
+import { OrderStatus, PrepStation } from '../types.js';
 
 export const dashboardRouter = Router();
 
@@ -19,11 +19,20 @@ const VALID_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 };
 
 const ALLOWED_DIETARY_TAGS = ['VEGAN', 'VEGETARIAN', 'GLUTEN_FREE', 'NUT_FREE', 'SPICY', 'CHEF_SPECIAL'];
+const ALLOWED_PREP_STATIONS: PrepStation[] = ['BARISTA', 'KITCHEN', 'BAKERY'];
 
-// 1. Get orders for the authenticated café (Strict Tenant Isolation)
+// 1. Get orders for the authenticated café (Strict Tenant Isolation with Prep Station filter - CP-39)
 dashboardRouter.get('/orders', (req: AuthenticatedRequest, res: Response): void => {
   const cafeId = req.user!.cafeId;
-  const orders = db.getOrdersByCafeId(cafeId);
+  const { station } = req.query;
+  let orders = db.getOrdersByCafeId(cafeId);
+
+  if (station && typeof station === 'string' && station.trim() !== 'all') {
+    const targetStation = station.trim().toUpperCase();
+    orders = orders.filter((o) =>
+      o.items.some((i) => (i.prepStation || 'BARISTA') === targetStation)
+    );
+  }
 
   res.json({
     orders,
@@ -132,7 +141,7 @@ dashboardRouter.patch('/items/:id/availability', (req: AuthenticatedRequest, res
 // 5. Create a new menu item
 dashboardRouter.post('/items', (req: AuthenticatedRequest, res: Response): void => {
   const cafeId = req.user!.cafeId;
-  const { name, categoryId, price, description, imageUrl, dietaryTags } = req.body;
+  const { name, categoryId, price, description, imageUrl, dietaryTags, prepStation } = req.body;
 
   if (!name || typeof name !== 'string' || name.trim().length === 0) {
     res.status(400).json({ error: 'Validation Error', message: 'Item name is required.' });
@@ -162,6 +171,11 @@ dashboardRouter.post('/items', (req: AuthenticatedRequest, res: Response): void 
     validDietaryTags = dietaryTags.filter((t) => ALLOWED_DIETARY_TAGS.includes(t));
   }
 
+  let validPrepStation: PrepStation | undefined = undefined;
+  if (prepStation && ALLOWED_PREP_STATIONS.includes(prepStation)) {
+    validPrepStation = prepStation;
+  }
+
   const createdItem = db.createMenuItem({
     cafeId,
     categoryId,
@@ -171,6 +185,7 @@ dashboardRouter.post('/items', (req: AuthenticatedRequest, res: Response): void 
     imageUrl: imageUrl ? String(imageUrl).trim() : '',
     isAvailable: true,
     dietaryTags: validDietaryTags,
+    prepStation: validPrepStation || 'BARISTA',
   });
 
   res.status(201).json({
@@ -184,7 +199,7 @@ dashboardRouter.post('/items', (req: AuthenticatedRequest, res: Response): void 
 dashboardRouter.put('/items/:id', (req: AuthenticatedRequest, res: Response): void => {
   const { id } = req.params;
   const cafeId = req.user!.cafeId;
-  const { name, categoryId, price, description, imageUrl, isAvailable, dietaryTags } = req.body;
+  const { name, categoryId, price, description, imageUrl, isAvailable, dietaryTags, prepStation } = req.body;
 
   const item = db.getItemById(id);
   if (!item) {
@@ -240,6 +255,10 @@ dashboardRouter.put('/items/:id', (req: AuthenticatedRequest, res: Response): vo
 
   if (Array.isArray(dietaryTags)) {
     updates.dietaryTags = dietaryTags.filter((t) => ALLOWED_DIETARY_TAGS.includes(t));
+  }
+
+  if (prepStation !== undefined && ALLOWED_PREP_STATIONS.includes(prepStation)) {
+    updates.prepStation = prepStation;
   }
 
   const updated = db.updateMenuItem(id, updates);
