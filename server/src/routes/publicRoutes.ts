@@ -325,6 +325,7 @@ publicRouter.get('/orders/:orderRef', (req: Request, res: Response): void => {
       tip: order.tip,
       tax: order.tax,
       total: order.total,
+      feedback: order.feedback,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
     },
@@ -385,6 +386,73 @@ publicRouter.post('/cafes/:slug/promo/validate', (req: Request, res: Response): 
       promo.discountType === 'PERCENTAGE'
         ? `${promo.discountValue}% discount applied!`
         : `${cafe.currencySymbol}${(promo.discountValue / 100).toFixed(2)} discount applied!`,
+  });
+});
+
+// 6. Submit customer feedback for an order (CP-37)
+publicRouter.post('/orders/:orderRef/feedback', (req: Request, res: Response): void => {
+  const { orderRef } = req.params;
+  const { rating, comment } = req.body;
+
+  const order = db.getOrderByRef(orderRef);
+  if (!order) {
+    res.status(404).json({
+      error: 'Not Found',
+      message: `Order with reference "${orderRef}" was not found.`,
+    });
+    return;
+  }
+
+  // Validate rating (integer 1 to 5)
+  const numericRating = Number(rating);
+  if (!Number.isInteger(numericRating) || numericRating < 1 || numericRating > 5) {
+    res.status(400).json({
+      error: 'Validation Error',
+      message: 'Rating must be an integer between 1 and 5.',
+    });
+    return;
+  }
+
+  // Validate comment length (max 500 chars)
+  if (comment !== undefined && comment !== null) {
+    if (typeof comment !== 'string') {
+      res.status(400).json({
+        error: 'Validation Error',
+        message: 'Feedback comment must be a string.',
+      });
+      return;
+    }
+    if (comment.length > 500) {
+      res.status(400).json({
+        error: 'Validation Error',
+        message: 'Feedback comment cannot exceed 500 characters.',
+      });
+      return;
+    }
+  }
+
+  // Prevent duplicate review per order
+  if (order.feedback) {
+    res.status(400).json({
+      error: 'Duplicate Feedback',
+      message: 'Feedback has already been submitted for this order.',
+    });
+    return;
+  }
+
+  const feedback = db.addOrderFeedback(order.orderRef, numericRating, comment);
+  if (!feedback) {
+    res.status(400).json({
+      error: 'Duplicate Feedback',
+      message: 'Feedback has already been recorded for this order.',
+    });
+    return;
+  }
+
+  res.status(201).json({
+    success: true,
+    message: 'Thank you for your feedback!',
+    feedback,
   });
 });
 

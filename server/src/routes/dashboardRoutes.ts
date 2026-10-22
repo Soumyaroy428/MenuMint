@@ -445,5 +445,17 @@ dashboardRouter.patch('/cafe/status', (req: AuthenticatedRequest, res: Response)
   });
 });
 
+// 15. Get customer feedbacks for authenticated café (Strict Tenant Isolation - CP-37)
+dashboardRouter.get('/feedback', (req: AuthenticatedRequest, res: Response): void => {
+  const cafeId = req.user!.cafeId;
+  const feedbacks = db.getFeedbacksByCafeId(cafeId);
+
+  res.json({
+    feedbacks,
+    count: feedbacks.length,
+  });
+});
+
+
 
 

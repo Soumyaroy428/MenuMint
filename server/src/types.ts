@@ -65,8 +65,23 @@ export interface Order {
   tip?: number; // in cents (gratuity)
   tax: number;
   total: number;
+  feedback?: {
+    rating: number;
+    comment?: string;
+    createdAt: string;
+  };
   createdAt: string;
   updatedAt: string;
+}
+
+export interface OrderFeedback {
+  id: string;
+  orderRef: string;
+  cafeId: string;
+  rating: number; // 1 to 5
+  comment?: string;
+  customerName: string;
+  createdAt: string;
 }
 
 export type DiscountType = 'PERCENTAGE' | 'FIXED';
@@ -109,5 +124,7 @@ export interface AnalyticsSummary {
   takeawayCount: number;
   topSellingItems: TopSellingItem[];
   statusDistribution: Record<OrderStatus, number>;
+  averageRating: number;
+  totalFeedbackCount: number;
 }
 

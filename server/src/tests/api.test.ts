@@ -583,6 +583,144 @@ describe('MenuMint API Test Suite', () => {
     assert.ok(orderedItem);
     assert.deepStrictEqual(orderedItem.dietaryTags, ['VEGETARIAN', 'GLUTEN_FREE', 'CHEF_SPECIAL']);
   });
+
+  // CP-37: Customer Order Rating & Post-Meal Feedback System
+  test('POST /api/orders/:orderRef/feedback should submit valid 1-5 star rating and comment', async () => {
+    // 1. Create a fresh order
+    const orderRes = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        orderType: 'takeaway',
+        customerName: 'Samira Khan',
+        items: [{ menuItemId: 'item-1', quantity: 1 }],
+      });
+
+    assert.strictEqual(orderRes.status, 201);
+    const orderRef = orderRes.body.order.orderRef;
+
+    // 2. Submit rating & comment
+    const feedbackRes = await request(app)
+      .post(`/api/orders/${orderRef}/feedback`)
+      .send({
+        rating: 5,
+        comment: 'Absolutely delightful coffee and rapid turnaround!',
+      });
+
+    assert.strictEqual(feedbackRes.status, 201);
+    assert.strictEqual(feedbackRes.body.success, true);
+    assert.strictEqual(feedbackRes.body.feedback.rating, 5);
+    assert.strictEqual(feedbackRes.body.feedback.comment, 'Absolutely delightful coffee and rapid turnaround!');
+    assert.strictEqual(feedbackRes.body.feedback.orderRef, orderRef);
+    assert.strictEqual(feedbackRes.body.feedback.customerName, 'Samira Khan');
+
+    // 3. Verify order query returns the snapshot feedback
+    const trackRes = await request(app).get(`/api/orders/${orderRef}`);
+    assert.strictEqual(trackRes.status, 200);
+    assert.ok(trackRes.body.order.feedback);
+    assert.strictEqual(trackRes.body.order.feedback.rating, 5);
+    assert.strictEqual(trackRes.body.order.feedback.comment, 'Absolutely delightful coffee and rapid turnaround!');
+  });
+
+  test('POST /api/orders/:orderRef/feedback should reject invalid rating, comment over 500 chars, and duplicates', async () => {
+    // 1. Create order
+    const orderRes = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        orderType: 'dine-in',
+        customerName: 'Reviewer Test',
+        items: [{ menuItemId: 'item-1', quantity: 1 }],
+      });
+    const orderRef = orderRes.body.order.orderRef;
+
+    // Reject rating 0
+    const resLow = await request(app)
+      .post(`/api/orders/${orderRef}/feedback`)
+      .send({ rating: 0 });
+    assert.strictEqual(resLow.status, 400);
+
+    // Reject rating 6
+    const resHigh = await request(app)
+      .post(`/api/orders/${orderRef}/feedback`)
+      .send({ rating: 6 });
+    assert.strictEqual(resHigh.status, 400);
+
+    // Reject non-integer rating 4.5
+    const resFloat = await request(app)
+      .post(`/api/orders/${orderRef}/feedback`)
+      .send({ rating: 4.5 });
+    assert.strictEqual(resFloat.status, 400);
+
+    // Reject comment > 500 characters
+    const longComment = 'a'.repeat(501);
+    const resLong = await request(app)
+      .post(`/api/orders/${orderRef}/feedback`)
+      .send({ rating: 4, comment: longComment });
+    assert.strictEqual(resLong.status, 400);
+
+    // Valid submission succeeds
+    const resValid = await request(app)
+      .post(`/api/orders/${orderRef}/feedback`)
+      .send({ rating: 4, comment: 'Nice and clean ambience' });
+    assert.strictEqual(resValid.status, 201);
+
+    // Duplicate submission on same order rejected
+    const resDuplicate = await request(app)
+      .post(`/api/orders/${orderRef}/feedback`)
+      .send({ rating: 5, comment: 'Trying to review again' });
+    assert.strictEqual(resDuplicate.status, 400);
+    assert.strictEqual(resDuplicate.body.error, 'Duplicate Feedback');
+
+    // Non-existent order returns 404
+    const res404 = await request(app)
+      .post('/api/orders/ORD-999999/feedback')
+      .send({ rating: 5 });
+    assert.strictEqual(res404.status, 404);
+  });
+
+  test('GET /api/dashboard/feedback should enforce strict tenant isolation and include metrics in analytics', async () => {
+    // 1. Cafe 1 owner fetches feedbacks
+    const fbRes = await request(app)
+      .get('/api/dashboard/feedback')
+      .set('Authorization', `Bearer ${ownerToken}`);
+
+    assert.strictEqual(fbRes.status, 200);
+    assert.ok(Array.isArray(fbRes.body.feedbacks));
+    assert.ok(fbRes.body.count >= 2);
+    // Ensure all returned feedbacks belong to cafe-1
+    for (const fb of fbRes.body.feedbacks) {
+      assert.strictEqual(fb.cafeId, 'cafe-1');
+    }
+
+    // 2. Login as Cafe 2 owner (Bella Vista)
+    const bellaLogin = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'owner@bellavista.com', password: 'password123' });
+    const bellaToken = bellaLogin.body.token;
+
+    const bellaFbRes = await request(app)
+      .get('/api/dashboard/feedback')
+      .set('Authorization', `Bearer ${bellaToken}`);
+
+    assert.strictEqual(bellaFbRes.status, 200);
+    assert.ok(Array.isArray(bellaFbRes.body.feedbacks));
+    // Verify Bella Vista has only its own feedbacks
+    for (const fb of bellaFbRes.body.feedbacks) {
+      assert.strictEqual(fb.cafeId, 'cafe-2');
+    }
+
+    // 3. Analytics includes CSAT metrics
+    const analyticsRes = await request(app)
+      .get('/api/dashboard/analytics')
+      .set('Authorization', `Bearer ${ownerToken}`);
+
+    assert.strictEqual(analyticsRes.status, 200);
+    assert.ok(typeof analyticsRes.body.analytics.averageRating === 'number');
+    assert.ok(analyticsRes.body.analytics.averageRating >= 1 && analyticsRes.body.analytics.averageRating <= 5);
+    assert.ok(typeof analyticsRes.body.analytics.totalFeedbackCount === 'number');
+    assert.ok(analyticsRes.body.analytics.totalFeedbackCount >= 2);
+  });
 });
 
 

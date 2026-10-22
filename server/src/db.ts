@@ -1,4 +1,4 @@
-import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode } from './types.js';
+import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, OrderFeedback } from './types.js';
 import bcrypt from 'bcryptjs';
 
 // Pre-seeded database in memory with consistent IDs and tenant isolation
@@ -296,6 +296,37 @@ class Database {
     },
   ];
 
+  feedbacks: OrderFeedback[] = [
+    {
+      id: 'fb-1',
+      orderRef: 'ORD-1001',
+      cafeId: 'cafe-1',
+      rating: 5,
+      comment: 'Best velvet flat white in town! Perfectly textured microfoam.',
+      customerName: 'Elena Rostova',
+      createdAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+    },
+    {
+      id: 'fb-2',
+      orderRef: 'ORD-1002',
+      cafeId: 'cafe-1',
+      rating: 4,
+      comment: 'Super fast pickup service, nitro cold brew was wonderfully smooth.',
+      customerName: 'Marcus Vance',
+      createdAt: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
+    },
+    // Cafe 2 feedback (Tenant isolation testing)
+    {
+      id: 'fb-201',
+      orderRef: 'ORD-2001',
+      cafeId: 'cafe-2',
+      rating: 5,
+      comment: 'Authentic Italian espresso with thick crema!',
+      customerName: 'Giovanni Rossi',
+      createdAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+    },
+  ];
+
   private orderCounter = 1003;
 
   // Accessors
@@ -439,6 +470,13 @@ class Database {
       .sort((a, b) => b.quantitySold - a.quantitySold)
       .slice(0, 5);
 
+    const feedbacks = this.getFeedbacksByCafeId(cafeId);
+    const totalFeedbackCount = feedbacks.length;
+    const averageRating =
+      totalFeedbackCount > 0
+        ? Math.round((feedbacks.reduce((sum, f) => sum + f.rating, 0) / totalFeedbackCount) * 10) / 10
+        : 0;
+
     return {
       totalRevenue,
       totalTips,
@@ -450,7 +488,45 @@ class Database {
       takeawayCount,
       topSellingItems,
       statusDistribution,
+      averageRating,
+      totalFeedbackCount,
     };
+  }
+
+  addOrderFeedback(orderRef: string, rating: number, comment?: string): OrderFeedback | null {
+    const order = this.getOrderByRef(orderRef);
+    if (!order) return null;
+
+    const existing = this.feedbacks.find((f) => f.orderRef.toUpperCase() === orderRef.toUpperCase());
+    if (existing || order.feedback) {
+      return null;
+    }
+
+    const newFeedback: OrderFeedback = {
+      id: `fb-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      orderRef: order.orderRef,
+      cafeId: order.cafeId,
+      rating,
+      comment: comment?.trim() ? comment.trim() : undefined,
+      customerName: order.customerName,
+      createdAt: new Date().toISOString(),
+    };
+
+    this.feedbacks.unshift(newFeedback);
+
+    order.feedback = {
+      rating,
+      comment: newFeedback.comment,
+      createdAt: newFeedback.createdAt,
+    };
+
+    return newFeedback;
+  }
+
+  getFeedbacksByCafeId(cafeId: string): OrderFeedback[] {
+    return this.feedbacks
+      .filter((f) => f.cafeId === cafeId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
   updateOrderStatus(orderId: string, status: OrderStatus): Order | undefined {

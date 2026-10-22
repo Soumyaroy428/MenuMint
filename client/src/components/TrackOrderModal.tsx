@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Order } from '../types';
-import { trackOrder } from '../api';
-import { Search, X, CheckCircle, AlertCircle, RefreshCw, Printer, Clock } from 'lucide-react';
+import { trackOrder, submitOrderFeedback } from '../api';
+import { Search, X, CheckCircle, AlertCircle, RefreshCw, Printer, Clock, Star } from 'lucide-react';
 
 interface TrackOrderModalProps {
   isOpen: boolean;
@@ -31,6 +31,13 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const pollIntervalRef = useRef<any>(null);
+
+  // Customer Feedback State (CP-37)
+  const [rating, setRating] = useState<number>(5);
+  const [hoverRating, setHoverRating] = useState<number>(0);
+  const [comment, setComment] = useState<string>('');
+  const [submittingFeedback, setSubmittingFeedback] = useState<boolean>(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen && initialOrderRef) {
@@ -81,6 +88,21 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
     e.preventDefault();
     if (!orderRef.trim()) return;
     fetchStatus(orderRef.trim());
+  };
+
+  const handleSubmitFeedback = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!order) return;
+    setSubmittingFeedback(true);
+    setFeedbackError(null);
+    try {
+      const res = await submitOrderFeedback(order.orderRef, rating, comment);
+      setOrder((prev) => (prev ? { ...prev, feedback: res.feedback } : null));
+    } catch (err: any) {
+      setFeedbackError(err.message || 'Failed to submit feedback.');
+    } finally {
+      setSubmittingFeedback(false);
+    }
   };
 
   const handlePrintReceipt = () => {
@@ -348,6 +370,145 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
                 <span>Print Receipt</span>
               </button>
             </div>
+
+            {/* Post-Meal Rating & Feedback (CP-37) */}
+            {order.feedback ? (
+              <div
+                style={{
+                  background: '#fefce8',
+                  border: '1px solid #fef08a',
+                  borderRadius: 10,
+                  padding: '0.85rem 1rem',
+                  marginTop: '0.85rem',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                  <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star
+                        key={s}
+                        size={16}
+                        fill={s <= order.feedback!.rating ? '#f59e0b' : '#e2e8f0'}
+                        color={s <= order.feedback!.rating ? '#f59e0b' : '#cbd5e1'}
+                      />
+                    ))}
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#b45309', marginLeft: 4 }}>
+                      {order.feedback.rating}/5
+                    </span>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      color: '#059669',
+                      background: '#d1fae5',
+                      padding: '2px 8px',
+                      borderRadius: 12,
+                    }}
+                  >
+                    ✓ Review Logged
+                  </span>
+                </div>
+                {order.feedback.comment && (
+                  <p style={{ margin: '0.3rem 0 0', fontSize: '0.82rem', color: '#78350f', fontStyle: 'italic', lineHeight: 1.4 }}>
+                    "{order.feedback.comment}"
+                  </p>
+                )}
+                <div style={{ fontSize: '0.7rem', color: '#92400e', marginTop: '0.35rem' }}>
+                  Thank you for rating your meal experience!
+                </div>
+              </div>
+            ) : order.status === 'COMPLETED' ? (
+              <div
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: 10,
+                  padding: '1rem',
+                  marginTop: '0.85rem',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                }}
+              >
+                <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0f172a', marginBottom: '0.2rem' }}>
+                  Rate Your Meal Experience
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '0.75rem' }}>
+                  How was everything? Leave a quick rating for our kitchen & baristas.
+                </div>
+
+                {feedbackError && (
+                  <div
+                    style={{
+                      background: '#fee2e2',
+                      color: '#991b1b',
+                      padding: '0.5rem 0.75rem',
+                      borderRadius: 6,
+                      fontSize: '0.8rem',
+                      marginBottom: '0.5rem',
+                    }}
+                  >
+                    {feedbackError}
+                  </div>
+                )}
+
+                <form onSubmit={handleSubmitFeedback}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: '0.65rem' }}>
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onMouseEnter={() => setHoverRating(s)}
+                        onMouseLeave={() => setHoverRating(0)}
+                        onClick={() => setRating(s)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: 2,
+                          transition: 'transform 0.15s ease',
+                          transform: (hoverRating || rating) >= s ? 'scale(1.15)' : 'scale(1)',
+                        }}
+                        aria-label={`Rate ${s} star${s > 1 ? 's' : ''}`}
+                      >
+                        <Star
+                          size={24}
+                          fill={(hoverRating || rating) >= s ? '#f59e0b' : '#f1f5f9'}
+                          color={(hoverRating || rating) >= s ? '#f59e0b' : '#cbd5e1'}
+                        />
+                      </button>
+                    ))}
+                    <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#f59e0b', marginLeft: 6 }}>
+                      {hoverRating || rating} / 5 Stars
+                    </span>
+                  </div>
+
+                  <div style={{ marginBottom: '0.65rem' }}>
+                    <textarea
+                      className="form-input"
+                      rows={2}
+                      maxLength={500}
+                      placeholder="Optional comments (e.g. perfect microfoam, speedy pickup, crispy toast)..."
+                      value={comment}
+                      onChange={(e) => setComment(e.target.value)}
+                      style={{ width: '100%', fontSize: '0.82rem', resize: 'vertical' }}
+                    />
+                    <div style={{ textAlign: 'right', fontSize: '0.7rem', color: '#94a3b8', marginTop: 2 }}>
+                      {comment.length}/500
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={submittingFeedback}
+                    style={{ width: '100%', fontSize: '0.82rem', padding: '0.5rem 0.75rem' }}
+                  >
+                    <Star size={14} />
+                    <span>{submittingFeedback ? 'Submitting Review...' : 'Submit Meal Review'}</span>
+                  </button>
+                </form>
+              </div>
+            ) : null}
 
             {lastRefreshed && (
               <div style={{ textAlign: 'center', fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.75rem' }}>

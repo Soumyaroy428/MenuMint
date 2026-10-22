@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Order, MenuItem, MenuCategory, OrderStatus, AnalyticsSummary, PromoCode, Cafe, DietaryTag } from '../types';
+import { User, Order, MenuItem, MenuCategory, OrderStatus, AnalyticsSummary, PromoCode, Cafe, DietaryTag, OrderFeedback } from '../types';
 import {
   loginOwner,
   fetchDashboardOrders,
@@ -16,6 +16,7 @@ import {
   deleteDashboardPromo,
   fetchDashboardCafe,
   updateDashboardCafeStatus,
+  fetchDashboardFeedbacks,
 } from '../api';
 import {
   Lock,
@@ -45,6 +46,7 @@ import {
   Heart,
   Pause,
   Play,
+  Star,
 } from 'lucide-react';
 
 interface DashboardPageProps {
@@ -71,6 +73,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [promos, setPromos] = useState<PromoCode[]>([]);
+  const [feedbacks, setFeedbacks] = useState<OrderFeedback[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
   const [loadingData, setLoadingData] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -149,12 +152,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
     if (!isPolling) setLoadingData(true);
     setActionError(null);
     try {
-      const [fetchedOrders, fetchedMenu, fetchedAnalytics, fetchedPromos, fetchedCafe] = await Promise.all([
+      const [fetchedOrders, fetchedMenu, fetchedAnalytics, fetchedPromos, fetchedCafe, fetchedFeedbacks] = await Promise.all([
         fetchDashboardOrders(authToken),
         fetchDashboardMenu(authToken),
         fetchDashboardAnalytics(authToken).catch(() => null),
         fetchDashboardPromos(authToken).catch(() => []),
         fetchDashboardCafe(authToken).catch(() => null),
+        fetchDashboardFeedbacks(authToken).catch(() => []),
       ]);
 
       if (isPolling && prevOrderCountRef.current > 0 && fetchedOrders.length > prevOrderCountRef.current) {
@@ -171,6 +175,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
       setCategories(fetchedMenu.categories);
       setMenuItems(fetchedMenu.items);
       setPromos(fetchedPromos);
+      setFeedbacks(fetchedFeedbacks);
       if (fetchedCafe) {
         setCafeProfile(fetchedCafe);
       }
@@ -1331,6 +1336,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
                     Total barista & kitchen gratuity
                   </div>
                 </div>
+
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#64748b', fontSize: '0.85rem' }}>
+                    <span>Customer Rating & CSAT</span>
+                    <Star size={18} color="#f59e0b" fill="#fef3c7" />
+                  </div>
+                  <div style={{ fontSize: '2rem', fontWeight: 800, color: '#f59e0b', marginTop: '0.5rem', display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                    {analytics.averageRating > 0 ? analytics.averageRating.toFixed(1) : 'N/A'}
+                    <span style={{ fontSize: '1rem', color: '#94a3b8', fontWeight: 500 }}>/ 5.0</span>
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>
+                    {analytics.totalFeedbackCount} {analytics.totalFeedbackCount === 1 ? 'review logged' : 'reviews logged'}
+                  </div>
+                </div>
               </div>
 
               {/* Two Column Section: Top Selling Items + Status Pipeline */}
@@ -1441,6 +1460,64 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
                     })}
                   </div>
                 </div>
+              </div>
+
+              {/* Customer Reviews & Feedback Feed (CP-37) */}
+              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem', marginTop: '1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Star size={18} color="#f59e0b" fill="#fef3c7" />
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Recent Customer Reviews & Feedback</h3>
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
+                    {feedbacks.length} {feedbacks.length === 1 ? 'Review' : 'Reviews'}
+                  </span>
+                </div>
+
+                {feedbacks.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: '#94a3b8' }}>
+                    No customer reviews submitted yet. When customers complete an order, they can leave 1–5 star ratings and meal feedback.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {feedbacks.map((fb) => (
+                      <div
+                        key={fb.id}
+                        style={{
+                          background: '#f8fafc',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: 10,
+                          padding: '0.85rem 1rem',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ display: 'flex', gap: 2 }}>
+                              {[1, 2, 3, 4, 5].map((s) => (
+                                <Star
+                                  key={s}
+                                  size={14}
+                                  fill={s <= fb.rating ? '#f59e0b' : '#e2e8f0'}
+                                  color={s <= fb.rating ? '#f59e0b' : '#cbd5e1'}
+                                />
+                              ))}
+                            </div>
+                            <strong style={{ fontSize: '0.85rem', color: '#0f172a' }}>{fb.customerName}</strong>
+                            <span style={{ fontSize: '0.75rem', color: '#64748b' }}>• {fb.orderRef}</span>
+                          </div>
+                          <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+                            {new Date(fb.createdAt).toLocaleDateString()} {new Date(fb.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        {fb.comment && (
+                          <p style={{ margin: '0.25rem 0 0', fontSize: '0.82rem', color: '#334155', fontStyle: 'italic', lineHeight: 1.4 }}>
+                            "{fb.comment}"
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </>
           )}

@@ -1,4 +1,4 @@
-import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, DietaryTag } from './types';
+import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, DietaryTag, OrderFeedback } from './types';
 
 const API_BASE = '/api';
 
@@ -308,6 +308,36 @@ export async function updateDashboardCafeStatus(
   }
   return data.cafe;
 }
+
+export async function submitOrderFeedback(
+  orderRef: string,
+  rating: number,
+  comment?: string
+): Promise<{ success: boolean; feedback: OrderFeedback; message: string }> {
+  const res = await fetch(`${API_BASE}/orders/${orderRef}/feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rating, comment }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || data.error || 'Failed to submit feedback');
+  }
+  return data;
+}
+
+export async function fetchDashboardFeedbacks(token: string): Promise<OrderFeedback[]> {
+  const res = await fetch(`${API_BASE}/dashboard/feedback`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to fetch customer feedbacks');
+  }
+  const data = await res.json();
+  return data.feedbacks;
+}
+
 
 
 
