@@ -36,6 +36,35 @@ export function playOrderReadyChime(): void {
 }
 
 /**
+ * Synthesizes a punchy tactile bump sound for KDS bump bar actions (CP-43)
+ */
+export function playBumpSound(): void {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(320, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.12);
+
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    osc.stop(ctx.currentTime + 0.13);
+  } catch {
+    // Graceful fallback
+  }
+}
+
+/**
  * Alternates the document title to attract customer's attention when in background tab
  */
 export function flashTabTitle(alertTitle: string, defaultTitle?: string): void {
@@ -119,3 +148,4 @@ export function sendBrowserNotification(title: string, options?: NotificationOpt
   }
   return false;
 }
+

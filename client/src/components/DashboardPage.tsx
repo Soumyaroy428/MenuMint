@@ -50,7 +50,9 @@ import {
   Play,
   Star,
   Percent,
+  Monitor,
 } from 'lucide-react';
+import { KitchenDisplaySystem } from './KitchenDisplaySystem';
 
 interface DashboardPageProps {
   onBackToMenu: () => void;
@@ -88,6 +90,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [newOrderAlert, setNewOrderAlert] = useState<string | null>(null);
+  const [isKDSOpen, setIsKDSOpen] = useState(false);
   const prevOrderCountRef = useRef<number>(0);
 
   // Item Management Modal State
@@ -742,6 +745,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            style={{ background: '#0f172a', color: '#38bdf8', borderColor: '#334155', fontWeight: 800 }}
+            onClick={() => setIsKDSOpen(true)}
+            title="Open Fullscreen Kitchen Display System (KDS)"
+          >
+            <Monitor size={14} color="#38bdf8" /> KDS View
+          </button>
+
           {openQRModal && (
             <button className="btn btn-secondary btn-sm" onClick={openQRModal} title="Generate Table QR Codes">
               <QrCode size={14} /> Table QRs
@@ -2273,6 +2286,21 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
             </form>
           </div>
         </div>
+      )}
+
+      {/* Full-Screen Kitchen Display System (KDS Mode - CP-43) */}
+      {isKDSOpen && currentUser && (
+        <KitchenDisplaySystem
+          orders={orders}
+          cafeName={currentUser.cafeName}
+          currencySymbol={currentUser.currencySymbol || '$'}
+          onUpdateStatus={handleStatusUpdate}
+          onClose={() => setIsKDSOpen(false)}
+          autoRefresh={autoRefresh}
+          onToggleAutoRefresh={() => setAutoRefresh(!autoRefresh)}
+          soundEnabled={soundEnabled}
+          onToggleSound={() => setSoundEnabled(!soundEnabled)}
+        />
       )}
 
     </div>
