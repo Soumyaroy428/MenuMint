@@ -78,6 +78,8 @@ export interface Order {
   taxRate?: number;
   taxName?: string;
   total: number;
+  estimatedPrepMinutes?: number; // Estimated prep time in minutes (CP-40)
+  estimatedReadyAt?: string;     // ISO timestamp for projected completion (CP-40)
   feedback?: {
     rating: number;
     comment?: string;

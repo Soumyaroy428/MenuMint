@@ -73,6 +73,8 @@ export interface Order {
   taxRate?: number; // Snapshot tax rate percentage at order time
   taxName?: string; // Snapshot tax label at order time
   total: number;
+  estimatedPrepMinutes?: number; // Estimated prep time in minutes (CP-40)
+  estimatedReadyAt?: string;     // ISO timestamp for projected completion (CP-40)
   feedback?: {
     rating: number;
     comment?: string;

@@ -946,6 +946,110 @@ describe('MenuMint API Test Suite', () => {
     assert.strictEqual(allRes.status, 200);
     assert.ok(allRes.body.orders.length >= baristaRes.body.orders.length);
   });
+
+  // -------------------------------------------------------------
+  // CP-40: Real-Time Kitchen Prep ETA & Dynamic Countdown Engine
+  // -------------------------------------------------------------
+  test('CP-40: POST /api/orders should calculate prep ETA and persist on order tracking', async () => {
+    // 1. Barista-only order
+    const baristaOrderRes = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        customerName: 'Alice Quick',
+        orderType: 'takeaway',
+        items: [{ menuItemId: 'item-1', quantity: 1 }],
+      });
+
+    assert.strictEqual(baristaOrderRes.status, 201);
+    const bOrder = baristaOrderRes.body.order;
+    assert.ok(typeof bOrder.estimatedPrepMinutes === 'number');
+    assert.ok(bOrder.estimatedPrepMinutes >= 4);
+    assert.ok(typeof bOrder.estimatedReadyAt === 'string');
+    assert.ok(new Date(bOrder.estimatedReadyAt).getTime() > Date.now());
+
+    // 2. Kitchen hot-food order (requires more prep time)
+    const kitchenOrderRes = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        customerName: 'Bob Feast',
+        orderType: 'dine-in',
+        tableNumber: 'Table 7',
+        items: [
+          { menuItemId: 'item-8', quantity: 2 },
+          { menuItemId: 'item-1', quantity: 1 },
+        ],
+      });
+
+    assert.strictEqual(kitchenOrderRes.status, 201);
+    const kOrder = kitchenOrderRes.body.order;
+    assert.ok(typeof kOrder.estimatedPrepMinutes === 'number');
+    assert.ok(kOrder.estimatedPrepMinutes >= 12);
+    assert.ok(kOrder.estimatedPrepMinutes > bOrder.estimatedPrepMinutes);
+
+    // 3. Verify public tracking endpoint exposes ETA fields
+    const trackRes = await request(app).get(`/api/orders/${kOrder.orderRef}`);
+    assert.strictEqual(trackRes.status, 200);
+    assert.strictEqual(trackRes.body.order.estimatedPrepMinutes, kOrder.estimatedPrepMinutes);
+    assert.strictEqual(trackRes.body.order.estimatedReadyAt, kOrder.estimatedReadyAt);
+  });
+
+  test('CP-40: PATCH /api/dashboard/orders/:id/eta should adjust prep ETA with tenant isolation', async () => {
+    // 1. Fetch an active order for Cafe 1
+    const ordersRes = await request(app)
+      .get('/api/dashboard/orders')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    assert.strictEqual(ordersRes.status, 200);
+    const activeOrder = ordersRes.body.orders.find((o: any) =>
+      ['PENDING', 'ACCEPTED', 'PREPARING'].includes(o.status)
+    );
+    assert.ok(activeOrder, 'Active order must exist');
+
+    const originalMins = activeOrder.estimatedPrepMinutes || 10;
+
+    // 2. Delay order ETA by +5 minutes
+    const delayRes = await request(app)
+      .patch(`/api/dashboard/orders/${activeOrder.id}/eta`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ deltaMinutes: 5 });
+
+    assert.strictEqual(delayRes.status, 200);
+    assert.strictEqual(delayRes.body.order.estimatedPrepMinutes, originalMins + 5);
+    assert.ok(new Date(delayRes.body.order.estimatedReadyAt).getTime() > Date.now());
+
+    // 3. Directly set ETA to 25 minutes
+    const directRes = await request(app)
+      .patch(`/api/dashboard/orders/${activeOrder.id}/eta`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ estimatedPrepMinutes: 25 });
+
+    assert.strictEqual(directRes.status, 200);
+    assert.strictEqual(directRes.body.order.estimatedPrepMinutes, 25);
+
+    // 4. Reject invalid values
+    const invRes1 = await request(app)
+      .patch(`/api/dashboard/orders/${activeOrder.id}/eta`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ estimatedPrepMinutes: -10 });
+    assert.strictEqual(invRes1.status, 400);
+
+    const invRes2 = await request(app)
+      .patch(`/api/dashboard/orders/${activeOrder.id}/eta`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({});
+    assert.strictEqual(invRes2.status, 400);
+
+    // 5. Tenant isolation: Cafe 1 owner cannot modify Cafe 2 order ETA
+    const cafe2OrderId = 'ord-init-201'; // belongs to cafe-2
+    const forbidRes = await request(app)
+      .patch(`/api/dashboard/orders/${cafe2OrderId}/eta`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ deltaMinutes: 5 });
+
+    assert.strictEqual(forbidRes.status, 403);
+    assert.strictEqual(forbidRes.body.error, 'Forbidden');
+  });
 });
 
 

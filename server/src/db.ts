@@ -208,6 +208,8 @@ class Database {
       subtotal: 1445,
       tax: 72,
       total: 1517,
+      estimatedPrepMinutes: 15,
+      estimatedReadyAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
       createdAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
       updatedAt: new Date().toISOString(),
     },
@@ -233,6 +235,8 @@ class Database {
       subtotal: 550,
       tax: 28,
       total: 578,
+      estimatedPrepMinutes: 8,
+      estimatedReadyAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
       createdAt: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
       updatedAt: new Date().toISOString(),
     },
@@ -258,6 +262,8 @@ class Database {
       subtotal: 350,
       tax: 18,
       total: 368,
+      estimatedPrepMinutes: 5,
+      estimatedReadyAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     },
@@ -579,6 +585,17 @@ class Database {
     const order = this.orders.find((o) => o.id === orderId);
     if (order) {
       order.status = status;
+      order.updatedAt = new Date().toISOString();
+      return order;
+    }
+    return undefined;
+  }
+
+  updateOrderEta(orderId: string, estimatedPrepMinutes: number, estimatedReadyAt: string): Order | undefined {
+    const order = this.orders.find((o) => o.id === orderId);
+    if (order) {
+      order.estimatedPrepMinutes = estimatedPrepMinutes;
+      order.estimatedReadyAt = estimatedReadyAt;
       order.updatedAt = new Date().toISOString();
       return order;
     }

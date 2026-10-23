@@ -100,6 +100,27 @@ export async function updateOrderStatus(token: string, orderId: string, status: 
   return data.order;
 }
 
+export async function updateOrderEta(
+  token: string,
+  orderId: string,
+  payload: { deltaMinutes?: number; estimatedPrepMinutes?: number }
+): Promise<Order> {
+  const res = await fetch(`${API_BASE}/dashboard/orders/${orderId}/eta`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to update order prep ETA');
+  }
+  return data.order;
+}
+
 export async function fetchDashboardMenu(token: string): Promise<{ categories: MenuCategory[]; items: MenuItem[] }> {
   const res = await fetch(`${API_BASE}/dashboard/menu`, {
     headers: { Authorization: `Bearer ${token}` },

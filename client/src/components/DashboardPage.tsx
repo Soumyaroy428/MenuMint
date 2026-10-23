@@ -18,6 +18,7 @@ import {
   updateDashboardCafeStatus,
   fetchDashboardFeedbacks,
   updateDashboardCafeSettings,
+  updateOrderEta,
 } from '../api';
 import {
   Lock,
@@ -302,6 +303,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
     }
   };
 
+  const handleAdjustEta = async (orderId: string, deltaMinutes: number) => {
+    if (!token) return;
+    setActionError(null);
+    try {
+      const updated = await updateOrderEta(token, orderId, { deltaMinutes });
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to adjust order prep ETA');
+    }
+  };
+
   const handleToggleAvailability = async (itemId: string, currentAvailability: boolean) => {
     if (!token) return;
     setActionError(null);
@@ -489,6 +501,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
             <div class="bold">${ord.orderType.toUpperCase()} ${ord.tableNumber ? '• ' + ord.tableNumber : ''}</div>
             <div>${new Date(ord.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
             <div style="margin-top:4px">Customer: ${ord.customerName}</div>
+            ${ord.estimatedPrepMinutes ? `<div style="margin-top:2px; font-weight: bold;">EST. PREP TIME: ~${ord.estimatedPrepMinutes} MINS</div>` : ''}
           </div>
           <div class="dashed"></div>
           ${ord.notes ? `<div class="note-box"><strong>KITCHEN NOTE:</strong> ${ord.notes}</div>` : ''}
@@ -1062,6 +1075,56 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
                     {ord.notes && (
                       <div style={{ background: '#fef3c7', padding: '0.35rem 0.6rem', borderRadius: 6, fontSize: '0.75rem', color: '#92400e', marginBottom: '0.5rem' }}>
                         Note: {ord.notes}
+                      </div>
+                    )}
+
+                    {/* Kitchen Prep ETA Bar & Quick Adjustments (CP-40) */}
+                    {['PENDING', 'ACCEPTED', 'PREPARING'].includes(ord.status) && (ord.estimatedPrepMinutes || ord.estimatedReadyAt) && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '0.35rem 0.6rem',
+                          borderRadius: 6,
+                          background: '#f0fdf4',
+                          border: '1px solid #bbf7d0',
+                          fontSize: '0.78rem',
+                          marginBottom: '0.6rem',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Clock size={13} color="#16a34a" />
+                          <strong style={{ color: '#166534' }}>
+                            ETA: ~{ord.estimatedPrepMinutes || 10}m
+                          </strong>
+                          {ord.estimatedReadyAt && (
+                            <span style={{ color: '#64748b', fontSize: '0.72rem' }}>
+                              ({new Date(ord.estimatedReadyAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+                            </span>
+                          )}
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '0.1rem 0.35rem', fontSize: '0.7rem', height: 20 }}
+                            onClick={() => handleAdjustEta(ord.id, -5)}
+                            title="Expedite ETA by 5 minutes"
+                          >
+                            -5m
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '0.1rem 0.35rem', fontSize: '0.7rem', height: 20 }}
+                            onClick={() => handleAdjustEta(ord.id, 5)}
+                            title="Delay ETA by 5 minutes"
+                          >
+                            +5m
+                          </button>
+                        </div>
                       </div>
                     )}
 

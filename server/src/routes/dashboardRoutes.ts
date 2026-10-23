@@ -85,6 +85,84 @@ dashboardRouter.patch('/orders/:id/status', (req: AuthenticatedRequest, res: Res
   });
 });
 
+// 2b. Adjust or expedite order prep ETA (CP-40)
+dashboardRouter.patch('/orders/:id/eta', (req: AuthenticatedRequest, res: Response): void => {
+  const { id } = req.params;
+  const { deltaMinutes, estimatedPrepMinutes } = req.body;
+  const cafeId = req.user!.cafeId;
+
+  const order = db.getOrderById(id);
+  if (!order) {
+    res.status(404).json({
+      error: 'Not Found',
+      message: `Order with ID "${id}" was not found.`,
+    });
+    return;
+  }
+
+  // Tenant Isolation Guard
+  if (order.cafeId !== cafeId) {
+    res.status(403).json({
+      error: 'Forbidden',
+      message: 'Access denied. You do not have permission to manage this order.',
+    });
+    return;
+  }
+
+  // ETA can only be adjusted for active orders
+  const activeStatuses: OrderStatus[] = ['PENDING', 'ACCEPTED', 'PREPARING'];
+  if (!activeStatuses.includes(order.status)) {
+    res.status(400).json({
+      error: 'Invalid Operation',
+      message: `Cannot adjust ETA for order in "${order.status}" status. Only active orders (PENDING, ACCEPTED, PREPARING) support ETA adjustments.`,
+    });
+    return;
+  }
+
+  let updatedReadyAtMs: number;
+  let finalPrepMinutes: number;
+
+  if (typeof estimatedPrepMinutes === 'number' && Number.isInteger(estimatedPrepMinutes)) {
+    if (estimatedPrepMinutes < 1 || estimatedPrepMinutes > 120) {
+      res.status(400).json({
+        error: 'Validation Error',
+        message: 'estimatedPrepMinutes must be an integer between 1 and 120.',
+      });
+      return;
+    }
+    updatedReadyAtMs = Date.now() + estimatedPrepMinutes * 60 * 1000;
+    finalPrepMinutes = Math.max(1, Math.round((updatedReadyAtMs - new Date(order.createdAt).getTime()) / 60000));
+  } else if (typeof deltaMinutes === 'number' && Number.isInteger(deltaMinutes)) {
+    if (deltaMinutes < -60 || deltaMinutes > 60) {
+      res.status(400).json({
+        error: 'Validation Error',
+        message: 'deltaMinutes must be an integer between -60 and +60.',
+      });
+      return;
+    }
+    const currentBaseMs = order.estimatedReadyAt
+      ? Math.max(new Date(order.estimatedReadyAt).getTime(), Date.now())
+      : Date.now() + (order.estimatedPrepMinutes || 10) * 60 * 1000;
+    updatedReadyAtMs = Math.max(currentBaseMs + deltaMinutes * 60 * 1000, Date.now() + 60 * 1000);
+    finalPrepMinutes = Math.max(1, Math.round((updatedReadyAtMs - new Date(order.createdAt).getTime()) / 60000));
+  } else {
+    res.status(400).json({
+      error: 'Validation Error',
+      message: 'Either deltaMinutes or estimatedPrepMinutes integer must be provided.',
+    });
+    return;
+  }
+
+  const newReadyAt = new Date(updatedReadyAtMs).toISOString();
+  const updated = db.updateOrderEta(order.id, finalPrepMinutes, newReadyAt);
+
+  res.json({
+    success: true,
+    message: `Order ETA updated to ${finalPrepMinutes} minutes.`,
+    order: updated,
+  });
+});
+
 // 3. Get menu items for owner management
 dashboardRouter.get('/menu', (req: AuthenticatedRequest, res: Response): void => {
   const cafeId = req.user!.cafeId;

@@ -39,6 +39,14 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
   const [submittingFeedback, setSubmittingFeedback] = useState<boolean>(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
 
+  // Live Timer for Countdown (CP-40)
+  const [now, setNow] = useState<number>(Date.now());
+  useEffect(() => {
+    if (!isOpen) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [isOpen]);
+
   useEffect(() => {
     if (isOpen && initialOrderRef) {
       setOrderRef(initialOrderRef);
@@ -133,6 +141,7 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
           <div class="row"><span>Customer:</span><strong>${order.customerName}</strong></div>
           <div class="row"><span>Fulfillment:</span><strong>${order.orderType} ${order.tableNumber ? `(${order.tableNumber})` : ''}</strong></div>
           <div class="row"><span>Status:</span><strong>${order.status}</strong></div>
+          ${order.estimatedPrepMinutes ? `<div class="row"><span>Est. Prep Time:</span><strong>~${order.estimatedPrepMinutes} mins</strong></div>` : ''}
           <hr style="border: 0; border-top: 1px dashed #ccc; margin: 10px 0;" />
           ${order.items
             .map(
@@ -184,6 +193,35 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
   const statusSteps = ['PENDING', 'ACCEPTED', 'PREPARING', 'READY', 'COMPLETED'];
   const currentIndex = order ? statusSteps.indexOf(order.status) : -1;
   const isActive = order ? ['PENDING', 'ACCEPTED', 'PREPARING', 'READY'].includes(order.status) : false;
+
+  // Real-Time Prep ETA & Countdown Calculations (CP-40)
+  let countdownText = '';
+  let prepProgressPct = 50;
+  let isOverdue = false;
+
+  if (order && order.estimatedReadyAt) {
+    const readyMs = new Date(order.estimatedReadyAt).getTime();
+    const createdMs = new Date(order.createdAt).getTime();
+    const diffMs = readyMs - now;
+
+    if (order.status === 'READY' || order.status === 'COMPLETED') {
+      countdownText = 'Ready for pickup!';
+      prepProgressPct = 100;
+    } else if (diffMs <= 0) {
+      isOverdue = true;
+      const overdueMins = Math.floor(Math.abs(diffMs) / 60000);
+      const overdueSecs = Math.floor((Math.abs(diffMs) % 60000) / 1000);
+      countdownText = overdueMins > 0 ? `Finishing up (+${overdueMins}m ${overdueSecs}s)` : `Finishing touches (+${overdueSecs}s)`;
+      prepProgressPct = 96;
+    } else {
+      const mins = Math.floor(diffMs / 60000);
+      const secs = Math.floor((diffMs % 60000) / 1000);
+      countdownText = mins > 0 ? `~${mins}m ${secs}s remaining` : `${secs}s remaining`;
+      const totalDuration = Math.max(readyMs - createdMs, 1000);
+      const elapsed = Math.max(now - createdMs, 0);
+      prepProgressPct = Math.min(Math.max((elapsed / totalDuration) * 100, 8), 95);
+    }
+  }
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -307,6 +345,97 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
                 );
               })}
             </div>
+
+            {/* Live Kitchen Prep ETA & Countdown Banner (CP-40) */}
+            {order.status === 'READY' ? (
+              <div
+                style={{
+                  background: '#f0fdf4',
+                  border: '1px solid #86efac',
+                  borderRadius: 10,
+                  padding: '0.85rem 1rem',
+                  marginBottom: '1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.75rem',
+                }}
+              >
+                <div
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: '50%',
+                    background: '#16a34a',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <CheckCircle size={22} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#166534' }}>
+                    🎉 Your Order Is Ready!
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#15803d' }}>
+                    {order.orderType === 'dine-in' && order.tableNumber
+                      ? `Your food is being served to ${order.tableNumber}. Enjoy your meal!`
+                      : 'Please proceed to the pickup counter to collect your order.'}
+                  </div>
+                </div>
+              </div>
+            ) : ['PENDING', 'ACCEPTED', 'PREPARING'].includes(order.status) && (order.estimatedPrepMinutes || order.estimatedReadyAt) ? (
+              <div
+                style={{
+                  background: isOverdue ? '#fffbeb' : '#f0fdf4',
+                  border: `1px solid ${isOverdue ? '#fde68a' : '#bbf7d0'}`,
+                  borderRadius: 10,
+                  padding: '0.85rem 1rem',
+                  marginBottom: '1rem',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.45rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Clock size={16} color={isOverdue ? '#d97706' : '#16a34a'} />
+                    <span style={{ fontWeight: 800, fontSize: '0.9rem', color: isOverdue ? '#92400e' : '#14532d' }}>
+                      Estimated Prep: ~{order.estimatedPrepMinutes || 10} mins
+                    </span>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: '0.78rem',
+                      fontWeight: 800,
+                      color: isOverdue ? '#b45309' : '#15803d',
+                      background: isOverdue ? '#fef3c7' : '#dcfce7',
+                      padding: '2px 8px',
+                      borderRadius: 10,
+                    }}
+                  >
+                    ⏱️ {countdownText}
+                  </span>
+                </div>
+
+                {/* Animated Progress Bar */}
+                <div style={{ width: '100%', height: 6, background: isOverdue ? '#fde68a' : '#dcfce7', borderRadius: 3, overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      width: `${prepProgressPct}%`,
+                      height: '100%',
+                      background: isOverdue ? '#f59e0b' : '#16a34a',
+                      borderRadius: 3,
+                      transition: 'width 1s linear',
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>
+                  <span>Target: {order.estimatedReadyAt ? new Date(order.estimatedReadyAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Soon'}</span>
+                  <span>{order.status === 'PREPARING' ? '🔥 Actively in Prep Station' : '⏳ Queued for Preparation'}</span>
+                </div>
+              </div>
+            ) : null}
 
             {/* Status Description Box */}
             <div

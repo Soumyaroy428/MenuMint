@@ -257,7 +257,25 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
   const calculatedTax = Math.round((discountedSubtotal * effectiveTaxRate) / 100);
   const calculatedTotal = discountedSubtotal + calculatedTax + calculatedTip;
 
-  // Persist order with snapshot taxRate & taxName
+  // Calculate dynamic prep ETA based on stations and active queue load (CP-40)
+  const hasKitchen = orderItemSnapshots.some((i) => i.prepStation === 'KITCHEN');
+  const hasBakery = orderItemSnapshots.some((i) => i.prepStation === 'BAKERY');
+  let basePrepTime = hasKitchen ? 12 : hasBakery ? 6 : 4;
+
+  const totalItemCount = orderItemSnapshots.reduce((acc, i) => acc + i.quantity, 0);
+  if (totalItemCount > 2) {
+    basePrepTime += Math.min(totalItemCount - 2, 6);
+  }
+
+  const activeCafeOrders = db.getOrdersByCafeId(cafe.id).filter((o) =>
+    ['PENDING', 'ACCEPTED', 'PREPARING'].includes(o.status)
+  ).length;
+  const queueDelay = activeCafeOrders * 2;
+
+  const estimatedPrepMinutes = Math.min(Math.max(basePrepTime + queueDelay, 5), 60);
+  const estimatedReadyAt = new Date(Date.now() + estimatedPrepMinutes * 60 * 1000).toISOString();
+
+  // Persist order with snapshot taxRate & taxName and prep ETA (CP-40)
   const newOrder = db.createOrder({
     cafeId: cafe.id,
     status: 'PENDING',
@@ -275,6 +293,8 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
     taxRate: effectiveTaxRate,
     taxName: effectiveTaxName,
     total: calculatedTotal,
+    estimatedPrepMinutes,
+    estimatedReadyAt,
   });
 
   res.status(201).json({
@@ -297,6 +317,8 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
       taxRate: newOrder.taxRate,
       taxName: newOrder.taxName,
       total: newOrder.total,
+      estimatedPrepMinutes: newOrder.estimatedPrepMinutes,
+      estimatedReadyAt: newOrder.estimatedReadyAt,
       currency: cafe.currency,
       currencySymbol: cafe.currencySymbol,
       createdAt: newOrder.createdAt,
@@ -338,6 +360,8 @@ publicRouter.get('/orders/:orderRef', (req: Request, res: Response): void => {
       taxRate: order.taxRate,
       taxName: order.taxName,
       total: order.total,
+      estimatedPrepMinutes: order.estimatedPrepMinutes,
+      estimatedReadyAt: order.estimatedReadyAt,
       feedback: order.feedback,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
