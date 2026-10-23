@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Order, MenuItem, MenuCategory, OrderStatus, AnalyticsSummary, PromoCode, Cafe, DietaryTag, OrderFeedback, PrepStation } from '../types';
+import { User, Order, MenuItem, MenuCategory, OrderStatus, AnalyticsSummary, PromoCode, Cafe, DietaryTag, OrderFeedback, PrepStation, AccountingReport } from '../types';
 import {
   loginOwner,
   fetchDashboardOrders,
@@ -19,6 +19,8 @@ import {
   fetchDashboardFeedbacks,
   updateDashboardCafeSettings,
   updateOrderEta,
+  fetchAccountingReport,
+  downloadAccountingCSV,
 } from '../api';
 import {
   Lock,
@@ -52,6 +54,10 @@ import {
   Percent,
   Monitor,
   Users,
+  Calculator,
+  FileSpreadsheet,
+  Calendar,
+  Receipt,
 } from 'lucide-react';
 import { KitchenDisplaySystem } from './KitchenDisplaySystem';
 import { BillSplitModal } from './BillSplitModal';
@@ -75,13 +81,18 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
   const [loginError, setLoginError] = useState<string | null>(null);
 
   // Dashboard content state
-  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'promos' | 'analytics'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'promos' | 'analytics' | 'accounting'>('orders');
   const [orders, setOrders] = useState<Order[]>([]);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [promos, setPromos] = useState<PromoCode[]>([]);
   const [feedbacks, setFeedbacks] = useState<OrderFeedback[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
+  const [accountingReport, setAccountingReport] = useState<AccountingReport | null>(null);
+  const [accountingLoading, setAccountingLoading] = useState<boolean>(false);
+  const [accountingPreset, setAccountingPreset] = useState<'today' | '7days' | 'month' | 'all' | 'custom'>('all');
+  const [accountingFrom, setAccountingFrom] = useState<string>('');
+  const [accountingTo, setAccountingTo] = useState<string>('');
   const [loadingData, setLoadingData] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [stationFilter, setStationFilter] = useState<'all' | 'BARISTA' | 'KITCHEN' | 'BAKERY'>('all');
@@ -269,6 +280,162 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
     } finally {
       setSettingsSaving(false);
     }
+  };
+
+  // CP-45: Periodic Financial Accounting & Tax Reporting Handlers
+  const loadAccounting = async (fromVal?: string, toVal?: string) => {
+    if (!token) return;
+    setAccountingLoading(true);
+    try {
+      const fromParam = fromVal !== undefined ? fromVal : accountingFrom;
+      const toParam = toVal !== undefined ? toVal : accountingTo;
+      const report = await fetchAccountingReport(token, {
+        from: fromParam || undefined,
+        to: toParam || undefined,
+      });
+      setAccountingReport(report);
+    } catch (err: any) {
+      alert(err.message || 'Failed to load accounting statement');
+    } finally {
+      setAccountingLoading(false);
+    }
+  };
+
+  const handlePresetChange = (preset: 'today' | '7days' | 'month' | 'all' | 'custom') => {
+    setAccountingPreset(preset);
+    let fromStr = '';
+    let toStr = '';
+    const now = new Date();
+
+    if (preset === 'today') {
+      fromStr = now.toISOString().slice(0, 10);
+      toStr = fromStr;
+    } else if (preset === '7days') {
+      const past7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      fromStr = past7.toISOString().slice(0, 10);
+      toStr = now.toISOString().slice(0, 10);
+    } else if (preset === 'month') {
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+      fromStr = firstDay.toISOString().slice(0, 10);
+      toStr = now.toISOString().slice(0, 10);
+    } else if (preset === 'all') {
+      fromStr = '';
+      toStr = '';
+    }
+
+    setAccountingFrom(fromStr);
+    setAccountingTo(toStr);
+    if (preset !== 'custom') {
+      loadAccounting(fromStr, toStr);
+    }
+  };
+
+  const handleExportAccountingCSV = async () => {
+    if (!token) return;
+    try {
+      await downloadAccountingCSV(token, {
+        from: accountingFrom || undefined,
+        to: accountingTo || undefined,
+      });
+    } catch (err: any) {
+      alert(err.message || 'Failed to export accounting CSV');
+    }
+  };
+
+  const handlePrintTaxStatement = () => {
+    if (!accountingReport) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Financial & Tax Statement - ${currentUser?.cafeName || 'MenuMint'}</title>
+          <style>
+            body { font-family: -apple-system, system-ui, sans-serif; padding: 24px; max-width: 680px; margin: 0 auto; color: #1e293b; }
+            .header-box { border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; }
+            .metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+            .metric-card { background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px 14px; border-radius: 8px; }
+            .metric-title { font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: bold; }
+            .metric-val { font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+            th { text-align: left; padding: 8px; background: #f1f5f9; border-bottom: 2px solid #cbd5e1; font-size: 11px; text-transform: uppercase; }
+            td { padding: 8px; border-bottom: 1px solid #e2e8f0; }
+            .text-right { text-align: right; }
+            .bold { font-weight: bold; }
+            .footer { margin-top: 30px; font-size: 11px; color: #64748b; text-align: center; border-top: 1px dashed #cbd5e1; padding-top: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="header-box">
+            <h1 style="margin:0; font-size: 22px;">${currentUser?.cafeName || 'MenuMint Café'}</h1>
+            <h2 style="margin:4px 0 0; font-size: 15px; color: #475569;">Periodic Financial Accounting & Tax Statement</h2>
+            <div style="font-size: 12px; color: #64748b; margin-top: 4px;">
+              Period: ${accountingReport.from} to ${accountingReport.to} • Generated: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}
+            </div>
+          </div>
+
+          <div class="metric-grid">
+            <div class="metric-card">
+              <div class="metric-title">Gross Sales</div>
+              <div class="metric-val">${accountingReport.currencySymbol}${(accountingReport.grossSales / 100).toFixed(2)}</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-title">Discounts Given</div>
+              <div class="metric-val" style="color: #dc2626;">-${accountingReport.currencySymbol}${(accountingReport.totalDiscounts / 100).toFixed(2)}</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-title">Taxable Net Sales</div>
+              <div class="metric-val" style="color: #0284c7;">${accountingReport.currencySymbol}${(accountingReport.netSales / 100).toFixed(2)}</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-title">Tax Collected</div>
+              <div class="metric-val" style="color: #059669;">${accountingReport.currencySymbol}${(accountingReport.totalTaxCollected / 100).toFixed(2)}</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-title">Staff Tips</div>
+              <div class="metric-val">${accountingReport.currencySymbol}${(accountingReport.totalTipsCollected / 100).toFixed(2)}</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-title">Total Revenue</div>
+              <div class="metric-val" style="color: #059669;">${accountingReport.currencySymbol}${(accountingReport.totalRevenue / 100).toFixed(2)}</div>
+            </div>
+          </div>
+
+          <h3 style="margin: 16px 0 6px; font-size: 14px;">Tax Compliance Liability Breakdown</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Tax Jurisdiction / Label</th>
+                <th>Rate</th>
+                <th class="text-right">Taxable Net Sales</th>
+                <th class="text-right">Tax Collected</th>
+                <th class="text-right">Orders</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${accountingReport.taxBreakdown.map((t) => `
+                <tr>
+                  <td class="bold">${t.taxName}</td>
+                  <td>${t.taxRate}%</td>
+                  <td class="text-right">${accountingReport.currencySymbol}${(t.taxableSubtotal / 100).toFixed(2)}</td>
+                  <td class="text-right bold" style="color: #059669;">${accountingReport.currencySymbol}${(t.taxCollected / 100).toFixed(2)}</td>
+                  <td class="text-right">${t.orderCount}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <div class="footer">
+            Official Merchant Statement generated via MenuMint SaaS • Multi-Tenant Compliant Accounting
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 250);
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -927,6 +1094,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
         >
           <TrendingUp size={16} /> Insights & Analytics
         </button>
+        <button
+          className={`btn btn-sm ${activeTab === 'accounting' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => {
+            setActiveTab('accounting');
+            if (!accountingReport) {
+              loadAccounting();
+            }
+          }}
+        >
+          <Calculator size={16} /> Accounting & Taxes
+        </button>
       </div>
 
       {actionError && (
@@ -1531,7 +1709,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
             </div>
           )}
         </div>
-      ) : (
+      ) : activeTab === 'analytics' ? (
         /* Insights & Analytics View */
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {/* Header */}
@@ -1820,6 +1998,350 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
               </div>
             </>
           )}
+        </div>
+      ) : (
+        /* CP-45: Accounting & Tax Compliance View */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {/* Header */}
+          <div
+            style={{
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: 12,
+              padding: '1.25rem',
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '1rem',
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Calculator size={22} color="#059669" />
+                <h2 style={{ fontSize: '1.3rem', fontWeight: 800, margin: 0 }}>
+                  Accounting & Periodic Tax Statements
+                </h2>
+              </div>
+              <p style={{ color: '#64748b', fontSize: '0.85rem', margin: '4px 0 0' }}>
+                Tax liability, gross/net sales reconciliation, and exportable financial statements for <strong>{currentUser.cafeName}</strong>.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handlePrintTaxStatement}
+                disabled={!accountingReport || accountingLoading}
+                title="Print Official Periodic Tax Statement"
+              >
+                <Printer size={14} /> Print Statement
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={handleExportAccountingCSV}
+                disabled={!accountingReport || accountingLoading}
+                title="Download Accounting & Tax CSV"
+                style={{ fontWeight: 700 }}
+              >
+                <FileSpreadsheet size={14} /> Export Tax CSV
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => loadAccounting()}
+                disabled={accountingLoading}
+                title="Refresh Financial Statement"
+              >
+                <RefreshCw size={14} className={accountingLoading ? 'spin-animation' : ''} />
+              </button>
+            </div>
+          </div>
+
+          {/* Date Period Filter Toolbar */}
+          <div
+            style={{
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: 12,
+              padding: '0.85rem 1.25rem',
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '0.75rem',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginRight: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Calendar size={14} /> Period:
+              </span>
+              {[
+                { id: 'today', label: 'Today' },
+                { id: '7days', label: 'Last 7 Days' },
+                { id: 'month', label: 'This Month' },
+                { id: 'all', label: 'All Time' },
+                { id: 'custom', label: 'Custom Range' },
+              ].map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={`btn btn-sm ${accountingPreset === p.id ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ fontSize: '0.75rem', padding: '0.3rem 0.65rem' }}
+                  onClick={() => handlePresetChange(p.id as any)}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Custom Date Inputs */}
+            {accountingPreset === 'custom' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <input
+                  type="date"
+                  className="form-input"
+                  style={{ height: 32, fontSize: '0.78rem', width: 135 }}
+                  value={accountingFrom}
+                  onChange={(e) => setAccountingFrom(e.target.value)}
+                />
+                <span style={{ fontSize: '0.78rem', color: '#64748b' }}>to</span>
+                <input
+                  type="date"
+                  className="form-input"
+                  style={{ height: 32, fontSize: '0.78rem', width: 135 }}
+                  value={accountingTo}
+                  onChange={(e) => setAccountingTo(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: '0.75rem', padding: '0.3rem 0.65rem' }}
+                  onClick={() => loadAccounting(accountingFrom, accountingTo)}
+                >
+                  Apply
+                </button>
+              </div>
+            )}
+          </div>
+
+          {accountingLoading ? (
+            <div style={{ textAlign: 'center', padding: '4rem 1rem', color: '#64748b' }}>
+              <RefreshCw size={24} className="spin-animation" style={{ margin: '0 auto 0.5rem' }} />
+              <div>Calculating financial ledger and tax reconciliations...</div>
+            </div>
+          ) : accountingReport ? (
+            <>
+              {/* Financial Metric Cards (6 KPIs) */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1rem 1.25rem' }}>
+                  <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>
+                    Gross Sales
+                  </div>
+                  <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#0f172a', marginTop: 4 }}>
+                    {accountingReport.currencySymbol}{(accountingReport.grossSales / 100).toFixed(2)}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                    Pre-discount ticket subtotal
+                  </div>
+                </div>
+
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1rem 1.25rem' }}>
+                  <div style={{ fontSize: '0.78rem', color: '#dc2626', fontWeight: 700, textTransform: 'uppercase' }}>
+                    Discounts / Promos
+                  </div>
+                  <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#dc2626', marginTop: 4 }}>
+                    -{accountingReport.currencySymbol}{(accountingReport.totalDiscounts / 100).toFixed(2)}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                    Coupons & promo allowances
+                  </div>
+                </div>
+
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1rem 1.25rem' }}>
+                  <div style={{ fontSize: '0.78rem', color: '#0284c7', fontWeight: 700, textTransform: 'uppercase' }}>
+                    Taxable Net Sales
+                  </div>
+                  <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#0284c7', marginTop: 4 }}>
+                    {accountingReport.currencySymbol}{(accountingReport.netSales / 100).toFixed(2)}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                    Tax base (Gross - Discounts)
+                  </div>
+                </div>
+
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1rem 1.25rem' }}>
+                  <div style={{ fontSize: '0.78rem', color: '#059669', fontWeight: 700, textTransform: 'uppercase' }}>
+                    Collected Tax
+                  </div>
+                  <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#059669', marginTop: 4 }}>
+                    {accountingReport.currencySymbol}{(accountingReport.totalTaxCollected / 100).toFixed(2)}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                    Collected tax liability
+                  </div>
+                </div>
+
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1rem 1.25rem' }}>
+                  <div style={{ fontSize: '0.78rem', color: '#d97706', fontWeight: 700, textTransform: 'uppercase' }}>
+                    Staff Gratuity / Tips
+                  </div>
+                  <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#d97706', marginTop: 4 }}>
+                    +{accountingReport.currencySymbol}{(accountingReport.totalTipsCollected / 100).toFixed(2)}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                    Barista & kitchen tip pool
+                  </div>
+                </div>
+
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: '1rem 1.25rem' }}>
+                  <div style={{ fontSize: '0.78rem', color: '#166534', fontWeight: 700, textTransform: 'uppercase' }}>
+                    Net Settlement Volume
+                  </div>
+                  <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#15803d', marginTop: 4 }}>
+                    {accountingReport.currencySymbol}{(accountingReport.totalRevenue / 100).toFixed(2)}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#166534', marginTop: 2 }}>
+                    Across {accountingReport.orderCount} orders (~{accountingReport.currencySymbol}{(accountingReport.averageTicket / 100).toFixed(2)} avg)
+                  </div>
+                </div>
+              </div>
+
+              {/* Tax Compliance Breakdown Box */}
+              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Receipt size={18} color="#059669" />
+                    <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0 }}>
+                      Tax Jurisdiction Compliance & Liabilities
+                    </h3>
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                    Jurisdiction Currency: <strong>{accountingReport.currency}</strong>
+                  </span>
+                </div>
+
+                {accountingReport.taxBreakdown.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '1.5rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+                    No taxable orders recorded in this date range.
+                  </div>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                      <thead>
+                        <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                          <th style={{ textAlign: 'left', padding: '0.65rem 0.85rem', color: '#475569', fontWeight: 700 }}>Tax Label & Rate</th>
+                          <th style={{ textAlign: 'right', padding: '0.65rem 0.85rem', color: '#475569', fontWeight: 700 }}>Taxable Net Sales</th>
+                          <th style={{ textAlign: 'right', padding: '0.65rem 0.85rem', color: '#475569', fontWeight: 700 }}>Tax Liability Collected</th>
+                          <th style={{ textAlign: 'right', padding: '0.65rem 0.85rem', color: '#475569', fontWeight: 700 }}>Order Count</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {accountingReport.taxBreakdown.map((t, idx) => (
+                          <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                            <td style={{ padding: '0.65rem 0.85rem', fontWeight: 700, color: '#1e293b' }}>
+                              {t.taxName} ({t.taxRate}%)
+                            </td>
+                            <td style={{ textAlign: 'right', padding: '0.65rem 0.85rem', color: '#334155' }}>
+                              {accountingReport.currencySymbol}{(t.taxableSubtotal / 100).toFixed(2)}
+                            </td>
+                            <td style={{ textAlign: 'right', padding: '0.65rem 0.85rem', fontWeight: 800, color: '#059669' }}>
+                              {accountingReport.currencySymbol}{(t.taxCollected / 100).toFixed(2)}
+                            </td>
+                            <td style={{ textAlign: 'right', padding: '0.65rem 0.85rem', color: '#64748b' }}>
+                              {t.orderCount}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Transactions Ledger */}
+              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0 }}>
+                    Accounting Ledger ({accountingReport.orders.length} Records)
+                  </h3>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={handleExportAccountingCSV}
+                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem' }}
+                  >
+                    <Download size={13} /> Export Ledger CSV
+                  </button>
+                </div>
+
+                {accountingReport.orders.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+                    No completed order records found for this period.
+                  </div>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                      <thead>
+                        <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                          <th style={{ textAlign: 'left', padding: '0.5rem 0.65rem', color: '#475569' }}>Date</th>
+                          <th style={{ textAlign: 'left', padding: '0.5rem 0.65rem', color: '#475569' }}>Ref</th>
+                          <th style={{ textAlign: 'left', padding: '0.5rem 0.65rem', color: '#475569' }}>Customer / Table</th>
+                          <th style={{ textAlign: 'right', padding: '0.5rem 0.65rem', color: '#475569' }}>Gross</th>
+                          <th style={{ textAlign: 'right', padding: '0.5rem 0.65rem', color: '#475569' }}>Disc</th>
+                          <th style={{ textAlign: 'right', padding: '0.5rem 0.65rem', color: '#475569' }}>Net</th>
+                          <th style={{ textAlign: 'right', padding: '0.5rem 0.65rem', color: '#475569' }}>Tax</th>
+                          <th style={{ textAlign: 'right', padding: '0.5rem 0.65rem', color: '#475569' }}>Tip</th>
+                          <th style={{ textAlign: 'right', padding: '0.5rem 0.65rem', color: '#475569' }}>Total</th>
+                          <th style={{ textAlign: 'center', padding: '0.5rem 0.65rem', color: '#475569' }}>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {accountingReport.orders.map((ord) => (
+                          <tr key={ord.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                            <td style={{ padding: '0.5rem 0.65rem', color: '#64748b' }}>
+                              {new Date(ord.createdAt).toLocaleDateString()}
+                            </td>
+                            <td style={{ padding: '0.5rem 0.65rem', fontWeight: 700, color: '#0f172a' }}>
+                              {ord.orderRef}
+                            </td>
+                            <td style={{ padding: '0.5rem 0.65rem', color: '#334155' }}>
+                              {ord.customerName} {ord.tableNumber ? `(${ord.tableNumber})` : ''}
+                            </td>
+                            <td style={{ textAlign: 'right', padding: '0.5rem 0.65rem', color: '#334155' }}>
+                              {accountingReport.currencySymbol}{(ord.subtotal / 100).toFixed(2)}
+                            </td>
+                            <td style={{ textAlign: 'right', padding: '0.5rem 0.65rem', color: ord.discount > 0 ? '#dc2626' : '#94a3b8' }}>
+                              {ord.discount > 0 ? `-${accountingReport.currencySymbol}${(ord.discount / 100).toFixed(2)}` : '-'}
+                            </td>
+                            <td style={{ textAlign: 'right', padding: '0.5rem 0.65rem', fontWeight: 600, color: '#0284c7' }}>
+                              {accountingReport.currencySymbol}{(ord.netSubtotal / 100).toFixed(2)}
+                            </td>
+                            <td style={{ textAlign: 'right', padding: '0.5rem 0.65rem', color: '#059669' }}>
+                              {accountingReport.currencySymbol}{(ord.tax / 100).toFixed(2)}
+                            </td>
+                            <td style={{ textAlign: 'right', padding: '0.5rem 0.65rem', color: ord.tip > 0 ? '#d97706' : '#94a3b8' }}>
+                              {ord.tip > 0 ? `+${accountingReport.currencySymbol}${(ord.tip / 100).toFixed(2)}` : '-'}
+                            </td>
+                            <td style={{ textAlign: 'right', padding: '0.5rem 0.65rem', fontWeight: 800, color: '#0f172a' }}>
+                              {accountingReport.currencySymbol}{(ord.total / 100).toFixed(2)}
+                            </td>
+                            <td style={{ textAlign: 'center', padding: '0.5rem 0.65rem' }}>
+                              <span style={{ fontSize: '0.68rem', padding: '2px 6px', borderRadius: 4, background: ord.status === 'COMPLETED' ? '#dcfce7' : '#f1f5f9', color: ord.status === 'COMPLETED' ? '#166534' : '#475569', fontWeight: 700 }}>
+                                {ord.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : null}
         </div>
       )}
 

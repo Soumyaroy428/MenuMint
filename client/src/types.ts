@@ -166,3 +166,44 @@ export interface AnalyticsSummary {
   totalFeedbackCount: number;
 }
 
+export interface TaxBreakdownLine {
+  taxName: string;
+  taxRate: number;
+  taxableSubtotal: number;
+  taxCollected: number;
+  orderCount: number;
+}
+
+export interface AccountingReport {
+  from: string;
+  to: string;
+  currency: string;
+  currencySymbol: string;
+  orderCount: number;
+  grossSales: number;
+  totalDiscounts: number;
+  netSales: number;
+  totalTaxCollected: number;
+  totalTipsCollected: number;
+  totalRevenue: number;
+  averageTicket: number;
+  taxBreakdown: TaxBreakdownLine[];
+  orders: {
+    id: string;
+    orderRef: string;
+    createdAt: string;
+    orderType: OrderType;
+    customerName: string;
+    tableNumber?: string;
+    subtotal: number;
+    discount: number;
+    netSubtotal: number;
+    taxRate: number;
+    taxName: string;
+    tax: number;
+    tip: number;
+    total: number;
+    status: OrderStatus;
+  }[];
+}
+

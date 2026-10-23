@@ -1,4 +1,4 @@
-import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, DietaryTag, OrderFeedback, PrepStation } from './types';
+import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, DietaryTag, OrderFeedback, PrepStation, AccountingReport } from './types';
 import { BillSplitResult } from './utils/billSplitter';
 
 const API_BASE = '/api';
@@ -415,6 +415,55 @@ export async function fetchBillSplit(orderRef: string, ways: number = 2): Promis
     throw new Error(data.message || 'Failed to calculate bill split');
   }
   return data.split;
+}
+
+export async function fetchAccountingReport(
+  token: string,
+  params?: { from?: string; to?: string }
+): Promise<AccountingReport> {
+  const query = new URLSearchParams();
+  if (params?.from) query.set('from', params.from);
+  if (params?.to) query.set('to', params.to);
+  const qStr = query.toString() ? `?${query.toString()}` : '';
+
+  const res = await fetch(`${API_BASE}/dashboard/accounting/report${qStr}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to fetch accounting report');
+  }
+  return data.report;
+}
+
+export async function downloadAccountingCSV(
+  token: string,
+  params?: { from?: string; to?: string }
+): Promise<void> {
+  const query = new URLSearchParams();
+  if (params?.from) query.set('from', params.from);
+  if (params?.to) query.set('to', params.to);
+  const qStr = query.toString() ? `?${query.toString()}` : '';
+
+  const res = await fetch(`${API_BASE}/dashboard/accounting/export${qStr}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!res.ok) {
+    throw new Error('Failed to export accounting CSV');
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `menumint-accounting-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 

@@ -1,4 +1,4 @@
-import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, OrderFeedback, PrepStation } from './types.js';
+import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, OrderFeedback, PrepStation, AccountingReport, TaxBreakdownLine } from './types.js';
 import bcrypt from 'bcryptjs';
 
 // Pre-seeded database in memory with consistent IDs and tenant isolation
@@ -542,6 +542,117 @@ class Database {
       statusDistribution,
       averageRating,
       totalFeedbackCount,
+    };
+  }
+
+  // CP-45: Periodic Financial Accounting & Tax Report Engine
+  getAccountingReport(cafeId: string, from?: string, to?: string): AccountingReport {
+    const cafe = this.getCafeById(cafeId);
+    const orders = this.getOrdersByCafeId(cafeId);
+
+    let fromDate: Date | null = from ? new Date(from) : null;
+    let toDate: Date | null = to ? new Date(to) : null;
+
+    if (fromDate && isNaN(fromDate.getTime())) fromDate = null;
+    if (toDate && isNaN(toDate.getTime())) toDate = null;
+
+    // If toDate is YYYY-MM-DD (10 chars), set to end of that calendar day
+    if (toDate && to && to.length <= 10) {
+      toDate.setHours(23, 59, 59, 999);
+    }
+
+    const matchingOrders = orders.filter((o) => {
+      if (o.status === 'CANCELLED') return false;
+      const createdAt = new Date(o.createdAt);
+      if (fromDate && createdAt < fromDate) return false;
+      if (toDate && createdAt > toDate) return false;
+      return true;
+    });
+
+    let grossSales = 0;
+    let totalDiscounts = 0;
+    let netSales = 0;
+    let totalTaxCollected = 0;
+    let totalTipsCollected = 0;
+    let totalRevenue = 0;
+
+    const taxMap = new Map<string, TaxBreakdownLine>();
+
+    const orderRows = matchingOrders.map((o) => {
+      const orderSubtotal = o.subtotal || 0;
+      const orderDiscount = o.discount || 0;
+      const orderNet = Math.max(0, orderSubtotal - orderDiscount);
+      const orderTax = o.tax || 0;
+      const orderTip = o.tip || 0;
+      const orderTotal = o.total || 0;
+      const orderTaxRate = typeof o.taxRate === 'number' ? o.taxRate : (typeof cafe?.taxRate === 'number' ? cafe.taxRate : 8.25);
+      const orderTaxName = o.taxName || cafe?.taxName || 'Sales Tax';
+
+      grossSales += orderSubtotal;
+      totalDiscounts += orderDiscount;
+      netSales += orderNet;
+      totalTaxCollected += orderTax;
+      totalTipsCollected += orderTip;
+      totalRevenue += orderTotal;
+
+      const taxKey = `${orderTaxName}_${orderTaxRate}`;
+      const existingTax = taxMap.get(taxKey) || {
+        taxName: orderTaxName,
+        taxRate: orderTaxRate,
+        taxableSubtotal: 0,
+        taxCollected: 0,
+        orderCount: 0,
+      };
+      existingTax.taxableSubtotal += orderNet;
+      existingTax.taxCollected += orderTax;
+      existingTax.orderCount += 1;
+      taxMap.set(taxKey, existingTax);
+
+      return {
+        id: o.id,
+        orderRef: o.orderRef,
+        createdAt: o.createdAt,
+        orderType: o.orderType,
+        customerName: o.customerName,
+        tableNumber: o.tableNumber,
+        subtotal: orderSubtotal,
+        discount: orderDiscount,
+        netSubtotal: orderNet,
+        taxRate: orderTaxRate,
+        taxName: orderTaxName,
+        tax: orderTax,
+        tip: orderTip,
+        total: orderTotal,
+        status: o.status,
+      };
+    });
+
+    const orderCount = matchingOrders.length;
+    const averageTicket = orderCount > 0 ? Math.round(totalRevenue / orderCount) : 0;
+    const taxBreakdown = Array.from(taxMap.values());
+
+    const earliestDate = matchingOrders.length > 0
+      ? matchingOrders.reduce((min, o) => (o.createdAt < min ? o.createdAt : min), matchingOrders[0].createdAt)
+      : new Date().toISOString();
+    const latestDate = matchingOrders.length > 0
+      ? matchingOrders.reduce((max, o) => (o.createdAt > max ? o.createdAt : max), matchingOrders[0].createdAt)
+      : new Date().toISOString();
+
+    return {
+      from: from || earliestDate,
+      to: to || latestDate,
+      currency: cafe?.currency || 'USD',
+      currencySymbol: cafe?.currencySymbol || '$',
+      orderCount,
+      grossSales,
+      totalDiscounts,
+      netSales,
+      totalTaxCollected,
+      totalTipsCollected,
+      totalRevenue,
+      averageTicket,
+      taxBreakdown,
+      orders: orderRows,
     };
   }
 

@@ -1237,6 +1237,72 @@ describe('MenuMint API Test Suite', () => {
     assert.strictEqual(oddSplit.guestShares[2].amountCents, 333);
     assert.strictEqual(334 + 333 + 333, 1000);
   });
+
+  // 47. CP-45: Financial Accounting & Periodic Tax Export Engine
+  test('CP-45: GET /api/dashboard/accounting/report and export should enforce tenant boundaries and calculate tax compliance accurately', async () => {
+    // 1. Rejects unauthenticated requests
+    const unauthReport = await request(app).get('/api/dashboard/accounting/report');
+    assert.strictEqual(unauthReport.status, 401);
+
+    const unauthExport = await request(app).get('/api/dashboard/accounting/export');
+    assert.strictEqual(unauthExport.status, 401);
+
+    // 2. Authenticated report for Cafe 1
+    const repRes = await request(app)
+      .get('/api/dashboard/accounting/report')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    assert.strictEqual(repRes.status, 200);
+    assert.strictEqual(repRes.body.success, true);
+    const report = repRes.body.report;
+
+    assert.strictEqual(report.currency, 'USD');
+    assert.strictEqual(report.currencySymbol, '$');
+    assert.ok(report.orderCount >= 1);
+    assert.ok(report.grossSales > 0);
+    assert.strictEqual(report.netSales, report.grossSales - report.totalDiscounts);
+    assert.strictEqual(report.totalRevenue, report.netSales + report.totalTaxCollected + report.totalTipsCollected);
+    assert.ok(Array.isArray(report.taxBreakdown));
+    assert.ok(report.taxBreakdown.length > 0);
+    assert.ok(report.orders.length > 0);
+
+    // Verify all orders in report strictly belong to Cafe 1
+    report.orders.forEach((o: any) => {
+      const dbOrder = db.getOrderById(o.id);
+      assert.strictEqual(dbOrder?.cafeId, 'cafe-1');
+    });
+
+    // 3. Authenticated report for Cafe 2 (Strict Tenant Boundary Isolation)
+    const loginCafe2 = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'owner@bellavista.com', password: 'password123' });
+    assert.strictEqual(loginCafe2.status, 200);
+    const tokenCafe2 = loginCafe2.body.token;
+
+    const repCafe2 = await request(app)
+      .get('/api/dashboard/accounting/report')
+      .set('Authorization', `Bearer ${tokenCafe2}`);
+    assert.strictEqual(repCafe2.status, 200);
+    const report2 = repCafe2.body.report;
+
+    assert.strictEqual(report2.currency, 'EUR');
+    assert.strictEqual(report2.currencySymbol, '€');
+    report2.orders.forEach((o: any) => {
+      const dbOrder = db.getOrderById(o.id);
+      assert.strictEqual(dbOrder?.cafeId, 'cafe-2');
+    });
+
+    // 4. Test accounting CSV export
+    const exportRes = await request(app)
+      .get('/api/dashboard/accounting/export')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    assert.strictEqual(exportRes.status, 200);
+    assert.ok(exportRes.headers['content-type'].includes('text/csv'));
+    assert.ok(exportRes.headers['content-disposition'].includes('attachment'));
+    assert.ok(exportRes.text.includes('MenuMint Periodic Accounting & Tax Statement'));
+    assert.ok(exportRes.text.includes('Gross Subtotal'));
+    assert.ok(exportRes.text.includes('Taxable Net Sales'));
+    assert.ok(exportRes.text.includes('TAX COMPLIANCE LIABILITY SUMMARY:'));
+  });
 });
 
 

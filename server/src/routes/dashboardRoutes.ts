@@ -626,6 +626,109 @@ dashboardRouter.patch('/cafe/settings', (req: AuthenticatedRequest, res: Respons
   });
 });
 
+// 17. CP-45: Get periodic financial accounting & tax compliance report
+dashboardRouter.get('/accounting/report', (req: AuthenticatedRequest, res: Response): void => {
+  const cafeId = req.user!.cafeId;
+  const { from, to } = req.query;
+
+  const report = db.getAccountingReport(
+    cafeId,
+    typeof from === 'string' ? from : undefined,
+    typeof to === 'string' ? to : undefined
+  );
+
+  res.json({
+    success: true,
+    report,
+  });
+});
+
+// 18. CP-45: Export periodic financial accounting & tax statement as CSV
+dashboardRouter.get('/accounting/export', (req: AuthenticatedRequest, res: Response): void => {
+  const cafeId = req.user!.cafeId;
+  const { from, to } = req.query;
+
+  const report = db.getAccountingReport(
+    cafeId,
+    typeof from === 'string' ? from : undefined,
+    typeof to === 'string' ? to : undefined
+  );
+
+  const headers = [
+    'Date',
+    'Order Ref',
+    'Order Type',
+    'Customer',
+    'Table',
+    'Gross Subtotal',
+    'Discount',
+    'Taxable Net Sales',
+    'Tax Rate (%)',
+    'Tax Label',
+    'Tax Collected',
+    'Gratuity / Tip',
+    'Total Paid',
+    'Status',
+  ];
+
+  const rows = report.orders.map((o) => [
+    new Date(o.createdAt).toLocaleDateString(),
+    o.orderRef,
+    o.orderType,
+    `"${o.customerName.replace(/"/g, '""')}"`,
+    `"${(o.tableNumber || '').replace(/"/g, '""')}"`,
+    (o.subtotal / 100).toFixed(2),
+    (o.discount / 100).toFixed(2),
+    (o.netSubtotal / 100).toFixed(2),
+    `${o.taxRate}%`,
+    `"${o.taxName.replace(/"/g, '""')}"`,
+    (o.tax / 100).toFixed(2),
+    (o.tip / 100).toFixed(2),
+    (o.total / 100).toFixed(2),
+    o.status,
+  ]);
+
+  const totalRow = [
+    `"PERIOD TOTALS (${report.orderCount} Orders)"`,
+    '""',
+    '""',
+    '""',
+    '""',
+    (report.grossSales / 100).toFixed(2),
+    (report.totalDiscounts / 100).toFixed(2),
+    (report.netSales / 100).toFixed(2),
+    '""',
+    '""',
+    (report.totalTaxCollected / 100).toFixed(2),
+    (report.totalTipsCollected / 100).toFixed(2),
+    (report.totalRevenue / 100).toFixed(2),
+    '""',
+  ];
+
+  const lines = [
+    `"MenuMint Periodic Accounting & Tax Statement - ${report.currency} (${report.currencySymbol})"`,
+    `"Period: ${report.from} to ${report.to}"`,
+    `"Generated: ${new Date().toISOString()}"`,
+    '',
+    headers.join(','),
+    ...rows.map((r) => r.join(',')),
+    '',
+    totalRow.join(','),
+    '',
+    '"TAX COMPLIANCE LIABILITY SUMMARY:"',
+    ...report.taxBreakdown.map((t) =>
+      `"${t.taxName} (${t.taxRate}%)","Taxable Base: ${(t.taxableSubtotal / 100).toFixed(2)}","Tax Collected: ${(t.taxCollected / 100).toFixed(2)}","Orders: ${t.orderCount}"`
+    ),
+  ];
+
+  const csvContent = lines.join('\n');
+  const filename = `menumint-accounting-${report.from.slice(0, 10)}-to-${report.to.slice(0, 10)}.csv`;
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(csvContent);
+});
+
 
 
 

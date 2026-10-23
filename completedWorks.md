@@ -3,18 +3,18 @@
 **Project:** MenuMint — Multi-tenant Digital Menu & Ordering SaaS for Cafés & Restaurants  
 **Live Production URL:** [https://menu-ordering-saas.vercel.app](https://menu-ordering-saas.vercel.app)  
 **Repository:** `https://github.com/Soumyaroy428/MenuMint.git` (Branch: `main`)  
-**Latest Deployed Commit:** `accc858`  
-**Automated Test Suite:** 46 / 46 Tests Passing (100% Pass Rate)  
+**Latest Deployed Commit:** `b8b8106`  
+**Automated Test Suite:** 47 / 47 Tests Passing (100% Pass Rate)  
 **Generated On:** October 23, 2026  
 
 ---
 
 ## 🌟 Executive Summary
-MenuMint is a lightweight, mobile-first SaaS designed for independent cafés and small food businesses. It empowers customers to browse live digital menus via QR codes, customize dietary preferences, calculate taxes and gratuity, track preparation count-downs in real time, split group bills with penny-exact accuracy, and reorder past favorites with 1 tap. For café owners and kitchen staff, it provides real-time kitchen polling, full-screen KDS bump bar mode, split prep station routing, audio alerts, and business analytics.
+MenuMint is a lightweight, mobile-first SaaS designed for independent cafés and small food businesses. It empowers customers to browse live digital menus via QR codes, customize dietary preferences, calculate taxes and gratuity, track preparation count-downs in real time, split group bills with penny-exact accuracy, and reorder past favorites with 1 tap. For café owners and kitchen staff, it provides real-time kitchen polling, full-screen KDS bump bar mode, split prep station routing, periodic financial accounting statements, tax compliance reporting with CSV exports, and business analytics.
 
 ---
 
-## ✅ Completed Checkpoints Registry (CP-00 through CP-44)
+## ✅ Completed Checkpoints Registry (CP-00 through CP-45)
 
 ### 🏗️ Phase 1: Baseline Architecture & MVP Foundation (CP-00 – CP-24)
 *Commit: `fbff90a`, `e38a3ed`, `2e44c28`*
@@ -127,15 +127,22 @@ MenuMint is a lightweight, mobile-first SaaS designed for independent cafés and
   - 1-click formatted copy for messaging (WhatsApp / SMS / Slack) and native Web Share API support.
   - Printable split checks for table guests (`handlePrintSplitReceipt`).
   - Integrated across the entire customer & staff journey: `TrackOrderModal.tsx`, `CartDrawer.tsx` (pre-order split), and `DashboardPage.tsx` (staff split & check printing).
+- **CP-45 (Financial Accounting & Periodic Tax Export Engine):**
+  - Multi-tenant periodic financial accounting engine (`db.getAccountingReport(cafeId, from, to)`).
+  - Protected API routes: `GET /api/dashboard/accounting/report` (JSON statement) and `GET /api/dashboard/accounting/export` (accounting-grade CSV download).
+  - Date filtering (Presets: Today, Last 7 Days, This Month, All Time, and custom date range picker).
+  - 6 Key Financial KPIs: Gross Sales, Promo / Discount Allowances, Taxable Net Sales, Collected Tax, Staff Gratuity / Tips, and Net Settlement Volume.
+  - Tax Compliance Breakdown Table: itemized taxable base and collected liabilities grouped by tax rate and name (e.g. Sales Tax 8.25%, VAT 10.0%).
+  - Printable Official Tax Statement: browser-formatted merchant tax report for accounting and audit compliance (`handlePrintTaxStatement`).
+  - Full CSV export with period totals and tax liability summary compatible with QuickBooks, Xero, and Excel.
 
 ---
 
-## 🔮 Upcoming Feature Checkpoints (CP-45 – CP-50)
+## 🔮 Upcoming Feature Checkpoints (CP-46 – CP-50)
 
 | Checkpoint | Status | Description |
 | :--- | :---: | :--- |
-| **CP-45** | *Next Up* | **Financial Accounting & Periodic Tax Export**<br>Automated breakdown export for monthly café tax and accounting compliance. |
-| **CP-46** | *Queued* | **Customer Loyalty Points & Digital Stamp Card**<br>Configurable loyalty program rewarding repeat visits. |
+| **CP-46** | *Next Up* | **Customer Loyalty Points & Digital Stamp Card**<br>Configurable loyalty program rewarding repeat visits. |
 | **CP-47** | *Queued* | **Auto-86 Inventory Depletion Alerts**<br>Automatic item exhaustion triggers based on threshold volume. |
 | **CP-48** | *Queued* | **Multi-Language Menu Localization**<br>Instant language switcher (English, Spanish, French, Italian). |
 | **CP-49** | *Queued* | **Scheduled Advance Ordering & Pickup Windows**<br>Curated time-slot selection for scheduled takeaway orders. |
@@ -144,8 +151,8 @@ MenuMint is a lightweight, mobile-first SaaS designed for independent cafés and
 ---
 
 ## 🧪 Current Verification Metrics
-- **Automated Tests:** 46 / 46 passing (`npm test`, 100% pass rate)
+- **Automated Tests:** 47 / 47 passing (`npm test`, 100% pass rate)
 - **Frontend Typecheck:** 0 errors (`tsc -p client/tsconfig.json`)
 - **Backend Typecheck:** 0 errors (`tsc -p server/tsconfig.json`)
-- **Vite Production Bundle:** Clean build, gzip optimized (`321 kB`)
+- **Vite Production Bundle:** Clean build, gzip optimized (`342 kB`)
 - **Live Deployment:** Operational at [https://menu-ordering-saas.vercel.app](https://menu-ordering-saas.vercel.app)
