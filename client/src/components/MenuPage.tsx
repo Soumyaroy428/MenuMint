@@ -330,11 +330,25 @@ export const MenuPage: React.FC<MenuPageProps> = ({
                         <span>No image</span>
                       </div>
                     )}
-                    <div style={{ position: 'absolute', top: 8, right: 8 }}>
-                      {item.isAvailable ? (
-                        <span className="badge badge-success">Available</span>
-                      ) : (
+                    <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: '4px' }}>
+                      {!item.isAvailable ? (
                         <span className="badge badge-danger">Sold Out</span>
+                      ) : item.trackInventory && item.inventoryCount !== undefined && item.inventoryCount <= (item.lowStockThreshold || 3) ? (
+                        <span
+                          style={{
+                            background: '#fffbeb',
+                            color: '#b45309',
+                            border: '1px solid #fcd34d',
+                            borderRadius: 6,
+                            padding: '2px 6px',
+                            fontSize: '0.7rem',
+                            fontWeight: 800,
+                          }}
+                        >
+                          ⚠️ Only {item.inventoryCount} Left!
+                        </span>
+                      ) : (
+                        <span className="badge badge-success">Available</span>
                       )}
                     </div>
                   </div>
@@ -376,7 +390,11 @@ export const MenuPage: React.FC<MenuPageProps> = ({
 
                       <button
                         className={`btn btn-sm ${inCartCount > 0 ? 'btn-primary' : 'btn-secondary'}`}
-                        disabled={!item.isAvailable || !cafe.isOpen}
+                        disabled={
+                          !item.isAvailable ||
+                          !cafe.isOpen ||
+                          (Boolean(item.trackInventory) && item.inventoryCount !== undefined && inCartCount >= item.inventoryCount)
+                        }
                         onClick={() => onAddToCart(item)}
                         title={
                           !item.isAvailable

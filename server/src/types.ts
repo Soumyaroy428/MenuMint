@@ -62,7 +62,18 @@ export interface MenuItem {
   isAvailable: boolean;
   dietaryTags?: DietaryTag[];
   prepStation?: PrepStation;
+  trackInventory?: boolean; // CP-47: Enable real-time inventory deduction & depletion tracking
+  inventoryCount?: number; // Current stock on hand
+  lowStockThreshold?: number; // Threshold to trigger low-stock warning (e.g. <= 3)
+  auto86Enabled?: boolean; // Automatically 86 (set isAvailable: false) when stock reaches 0
   createdAt: string;
+}
+
+export interface InventorySummary {
+  totalTrackedItems: number;
+  lowStockCount: number;
+  depletedCount: number; // 86'd items
+  items: MenuItem[];
 }
 
 export interface OrderItemSnapshot {

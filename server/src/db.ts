@@ -1,4 +1,4 @@
-import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, OrderFeedback, PrepStation, AccountingReport, TaxBreakdownLine, LoyaltyProgramConfig, LoyaltyAccount } from './types.js';
+import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, OrderFeedback, PrepStation, AccountingReport, TaxBreakdownLine, LoyaltyProgramConfig, LoyaltyAccount, InventorySummary } from './types.js';
 import bcrypt from 'bcryptjs';
 
 // Pre-seeded database in memory with consistent IDs and tenant isolation
@@ -106,6 +106,10 @@ class Database {
       isAvailable: true,
       dietaryTags: ['VEGAN', 'GLUTEN_FREE', 'CHEF_SPECIAL'],
       prepStation: 'BARISTA',
+      trackInventory: true,
+      inventoryCount: 8,
+      lowStockThreshold: 2,
+      auto86Enabled: true,
       createdAt: new Date().toISOString(),
     },
     {
@@ -132,6 +136,10 @@ class Database {
       isAvailable: true,
       dietaryTags: ['VEGETARIAN'],
       prepStation: 'BAKERY',
+      trackInventory: true,
+      inventoryCount: 15,
+      lowStockThreshold: 3,
+      auto86Enabled: true,
       createdAt: new Date().toISOString(),
     },
     {
@@ -145,6 +153,10 @@ class Database {
       isAvailable: false, // Intentionally unavailable for CP-10 verification!
       dietaryTags: ['VEGETARIAN'],
       prepStation: 'BAKERY',
+      trackInventory: true,
+      inventoryCount: 0,
+      lowStockThreshold: 2,
+      auto86Enabled: true,
       createdAt: new Date().toISOString(),
     },
     {
@@ -904,6 +916,109 @@ class Database {
       totalStampsIssued,
       rewardsAvailable,
       totalRewardsRedeemed,
+    };
+  }
+
+  // CP-47: Auto-86 Inventory Depletion Methods
+  deductInventory(
+    cafeId: string,
+    items: { menuItemId: string; quantity: number }[]
+  ): { success: boolean; depletedItemNames: string[]; error?: string } {
+    // 1. First pass: verify sufficient stock for all tracked items
+    for (const reqItem of items) {
+      const item = this.getItemById(reqItem.menuItemId);
+      if (item && item.cafeId === cafeId && item.trackInventory) {
+        const available = item.inventoryCount !== undefined ? item.inventoryCount : 0;
+        if (available < reqItem.quantity) {
+          return {
+            success: false,
+            depletedItemNames: [],
+            error: `Only ${available} unit${available === 1 ? '' : 's'} of "${item.name}" remaining in stock.`,
+          };
+        }
+      }
+    }
+
+    // 2. Second pass: deduct stock and trigger Auto-86 if depleted
+    const depletedItemNames: string[] = [];
+    for (const reqItem of items) {
+      const item = this.getItemById(reqItem.menuItemId);
+      if (item && item.cafeId === cafeId && item.trackInventory) {
+        const current = item.inventoryCount !== undefined ? item.inventoryCount : 0;
+        const newCount = Math.max(0, current - reqItem.quantity);
+        item.inventoryCount = newCount;
+
+        if (newCount === 0 && item.auto86Enabled) {
+          item.isAvailable = false;
+          depletedItemNames.push(item.name);
+        }
+      }
+    }
+
+    return { success: true, depletedItemNames };
+  }
+
+  updateItemStock(
+    cafeId: string,
+    itemId: string,
+    updates: {
+      inventoryCount?: number;
+      restockDelta?: number;
+      trackInventory?: boolean;
+      lowStockThreshold?: number;
+      auto86Enabled?: boolean;
+    }
+  ): MenuItem | null {
+    const item = this.getItemById(itemId);
+    if (!item || item.cafeId !== cafeId) return null;
+
+    if (updates.trackInventory !== undefined) {
+      item.trackInventory = Boolean(updates.trackInventory);
+    }
+    if (updates.lowStockThreshold !== undefined) {
+      item.lowStockThreshold = Math.max(0, Number(updates.lowStockThreshold) || 0);
+    }
+    if (updates.auto86Enabled !== undefined) {
+      item.auto86Enabled = Boolean(updates.auto86Enabled);
+    }
+
+    if (updates.restockDelta !== undefined) {
+      const current = item.inventoryCount || 0;
+      item.inventoryCount = Math.max(0, current + updates.restockDelta);
+    } else if (updates.inventoryCount !== undefined) {
+      item.inventoryCount = Math.max(0, Number(updates.inventoryCount) || 0);
+    }
+
+    // Auto-restore availability if restocked above 0
+    if (item.inventoryCount !== undefined && item.inventoryCount > 0 && !item.isAvailable && item.auto86Enabled) {
+      item.isAvailable = true;
+    }
+
+    return item;
+  }
+
+  getInventorySummary(cafeId: string): InventorySummary {
+    const cafeItems = this.getItemsByCafeId(cafeId);
+    const trackedItems = cafeItems.filter((i) => i.trackInventory);
+
+    let lowStockCount = 0;
+    let depletedCount = 0;
+
+    for (const item of trackedItems) {
+      const count = item.inventoryCount || 0;
+      const threshold = item.lowStockThreshold !== undefined ? item.lowStockThreshold : 3;
+      if (!item.isAvailable || count === 0) {
+        depletedCount++;
+      } else if (count <= threshold) {
+        lowStockCount++;
+      }
+    }
+
+    return {
+      totalTrackedItems: trackedItems.length,
+      lowStockCount,
+      depletedCount,
+      items: trackedItems,
     };
   }
 }

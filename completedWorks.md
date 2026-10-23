@@ -3,8 +3,8 @@
 **Project:** MenuMint — Multi-tenant Digital Menu & Ordering SaaS for Cafés & Restaurants  
 **Live Production URL:** [https://menu-ordering-saas.vercel.app](https://menu-ordering-saas.vercel.app)  
 **Repository:** `https://github.com/Soumyaroy428/MenuMint.git` (Branch: `main`)  
-**Latest Deployed Commit:** `1e14397`  
-**Automated Test Suite:** 48 / 48 Tests Passing (100% Pass Rate)  
+**Latest Deployed Commit:** `61dd4f0`  
+**Automated Test Suite:** 49 / 49 Tests Passing (100% Pass Rate)  
 **Generated On:** October 23, 2026  
 
 ---
@@ -14,7 +14,7 @@ MenuMint is a lightweight, mobile-first SaaS designed for independent cafés and
 
 ---
 
-## ✅ Completed Checkpoints Registry (CP-00 through CP-46)
+## ✅ Completed Checkpoints Registry (CP-00 through CP-47)
 
 ### 🏗️ Phase 1: Baseline Architecture & MVP Foundation (CP-00 – CP-24)
 *Commit: `fbff90a`, `e38a3ed`, `2e44c28`*
@@ -146,22 +146,30 @@ MenuMint is a lightweight, mobile-first SaaS designed for independent cafés and
   - Menu Hero banner and Navbar shortcut directing customers to check their stamp balance.
   - Owner Dashboard "Stamp Card & Loyalty" tab featuring 4 KPI metric cards (Enrolled Members, Stamps Issued, Rewards Waiting, Vouchers Redeemed), settings configuration form, and live digital card preview.
   - Strict multi-tenant isolation preventing stamps and vouchers earned at Café 1 from being visible or redeemed at Café 2.
+- **CP-47 (Auto-86 Inventory Depletion Alerts Engine):**
+  - Real-time inventory tracking properties on menu items (`trackInventory`, `inventoryCount`, `lowStockThreshold`, `auto86Enabled`).
+  - Server-authoritative inventory validation on checkout (`POST /api/orders`): rejects order if requested quantity exceeds available stock with transparent customer warning.
+  - Automatic inventory deduction upon successful order submission (`db.deductInventory`).
+  - Automatic "86" depletion trigger: when stock drops to 0, automatically flips `isAvailable = false`, preventing kitchen bottlenecks during peak rush.
+  - Low-stock badge callouts on the customer digital menu (`⚠️ Only X Left!`) and stock limit enforcement in the customer cart.
+  - Owner Dashboard Menu Catalog monitor bar: displays live tracked count, low stock count, and depleted items count with quick filter pills (`All`, `⚠️ Low Stock`, `🔴 86'd`).
+  - 1-Click Quick Restock button (`+10 Restock`) on menu item rows (`PATCH /api/dashboard/items/:id/stock`), which instantly restores item availability when restocked above 0.
+  - Full CRUD modal integration: configure units on hand, warning thresholds, and auto-86 toggle per item with strict multi-tenant boundary isolation.
 
 ---
 
-## 🔮 Upcoming Feature Checkpoints (CP-47 – CP-50)
+## 🔮 Upcoming Feature Checkpoints (CP-48 – CP-50)
 
 | Checkpoint | Status | Description |
 | :--- | :---: | :--- |
-| **CP-47** | *Next Up* | **Auto-86 Inventory Depletion Alerts**<br>Automatic item exhaustion triggers based on threshold volume. |
-| **CP-48** | *Queued* | **Multi-Language Menu Localization**<br>Instant language switcher (English, Spanish, French, Italian). |
+| **CP-48** | *Next Up* | **Multi-Language Menu Localization**<br>Instant language switcher (English, Spanish, French, Italian). |
 | **CP-49** | *Queued* | **Scheduled Advance Ordering & Pickup Windows**<br>Curated time-slot selection for scheduled takeaway orders. |
 | **CP-50** | *Queued* | **Golden Master Production Audit & Performance Benchmark**<br>Comprehensive security, Lighthouse performance, and multi-tenant audit. |
 
 ---
 
 ## 🧪 Current Verification Metrics
-- **Automated Tests:** 48 / 48 passing (`npm test`, 100% pass rate)
+- **Automated Tests:** 49 / 49 passing (`npm test`, 100% pass rate)
 - **Frontend Typecheck:** 0 errors (`tsc -p client/tsconfig.json`)
 - **Backend Typecheck:** 0 errors (`tsc -p server/tsconfig.json`)
 - **Vite Production Bundle:** Clean build, gzip optimized (`342 kB`)

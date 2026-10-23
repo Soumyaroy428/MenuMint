@@ -1432,6 +1432,110 @@ describe('MenuMint API Test Suite', () => {
         rewardDescription: '$5.00 Off Any Order',
       });
   });
+
+  test('CP-47: Auto-86 Inventory Depletion Alerts (Stock Deduction, Depletion Trigger, Quick Restock & Multi-Tenant Isolation)', async () => {
+    // 1. Authenticated inventory summary for Cafe 1
+    const invRes = await request(app)
+      .get('/api/dashboard/inventory')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    assert.strictEqual(invRes.status, 200);
+    assert.strictEqual(invRes.body.success, true);
+    assert.ok(invRes.body.inventory.totalTrackedItems >= 3);
+    assert.ok(invRes.body.inventory.depletedCount >= 1); // item-7 is pre-seeded depleted
+
+    // 2. Set item-6 to a controlled test stock of 5 units
+    const resetStock = await request(app)
+      .patch('/api/dashboard/items/item-6/stock')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        trackInventory: true,
+        inventoryCount: 5,
+        lowStockThreshold: 2,
+        auto86Enabled: true,
+      });
+    assert.strictEqual(resetStock.status, 200);
+    assert.strictEqual(resetStock.body.item.inventoryCount, 5);
+    assert.strictEqual(resetStock.body.item.isAvailable, true);
+
+    // 3. Attempt to order more than available stock (e.g. 10 units when only 5 in stock)
+    const oversellRes = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        customerName: 'Hungry Customer',
+        orderType: 'takeaway',
+        items: [{ menuItemId: 'item-6', quantity: 10 }],
+      });
+    assert.strictEqual(oversellRes.status, 400);
+    assert.strictEqual(oversellRes.body.error, 'Inventory Depleted');
+    assert.ok(oversellRes.body.message.includes('Only 5 units'));
+
+    // 4. Order 3 units (leaving 2 units <= lowStockThreshold 2)
+    const validOrder1 = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        customerName: 'Coffee Lover',
+        orderType: 'takeaway',
+        items: [{ menuItemId: 'item-6', quantity: 3 }],
+      });
+    assert.strictEqual(validOrder1.status, 201);
+
+    // Verify stock is now 2 and item is still available
+    const itemAfterOrder1 = db.getItemById('item-6');
+    assert.strictEqual(itemAfterOrder1?.inventoryCount, 2);
+    assert.strictEqual(itemAfterOrder1?.isAvailable, true);
+
+    // 5. Order the remaining 2 units -> triggers Auto-86 depletion!
+    const validOrder2 = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        customerName: 'Bakery Fan',
+        orderType: 'takeaway',
+        items: [{ menuItemId: 'item-6', quantity: 2 }],
+      });
+    assert.strictEqual(validOrder2.status, 201);
+
+    // Verify item-6 inventory is now 0 and isAvailable has been automatically flipped to false (86'd)
+    const itemAfterDepleted = db.getItemById('item-6');
+    assert.strictEqual(itemAfterDepleted?.inventoryCount, 0);
+    assert.strictEqual(itemAfterDepleted?.isAvailable, false);
+
+    // Subsequent order must be rejected as sold out
+    const rejectedAfter86 = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        customerName: 'Late Guest',
+        orderType: 'takeaway',
+        items: [{ menuItemId: 'item-6', quantity: 1 }],
+      });
+    assert.strictEqual(rejectedAfter86.status, 400);
+    assert.strictEqual(rejectedAfter86.body.error, 'Item Unavailable');
+
+    // 6. Quick Restock via Dashboard (+15 units)
+    const restockRes = await request(app)
+      .patch('/api/dashboard/items/item-6/stock')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ restockDelta: 15 });
+    assert.strictEqual(restockRes.status, 200);
+    assert.strictEqual(restockRes.body.item.inventoryCount, 15);
+    assert.strictEqual(restockRes.body.item.isAvailable, true); // Auto-restored availability!
+
+    // 7. Multi-Tenant Isolation Check
+    // Owner of Cafe 2 must be rejected if trying to restock or alter Cafe 1 items
+    const loginCafe2 = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'owner@bellavista.com', password: 'password123' });
+    const tokenCafe2 = loginCafe2.body.token;
+
+    const crossTenantRestock = await request(app)
+      .patch('/api/dashboard/items/item-6/stock')
+      .set('Authorization', `Bearer ${tokenCafe2}`)
+      .send({ restockDelta: 20 });
+    assert.strictEqual(crossTenantRestock.status, 404);
+  });
 });
 
 

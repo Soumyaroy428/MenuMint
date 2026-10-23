@@ -257,6 +257,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <button
                     className="qty-btn"
                     onClick={() => onUpdateQuantity(cartItem.item.id, 1)}
+                    disabled={
+                      Boolean(cartItem.item.trackInventory) &&
+                      cartItem.item.inventoryCount !== undefined &&
+                      cartItem.quantity >= cartItem.item.inventoryCount
+                    }
+                    title={
+                      Boolean(cartItem.item.trackInventory) &&
+                      cartItem.item.inventoryCount !== undefined &&
+                      cartItem.quantity >= cartItem.item.inventoryCount
+                        ? `Maximum available stock (${cartItem.item.inventoryCount}) reached`
+                        : 'Increase quantity'
+                    }
                     aria-label="Increase quantity"
                   >
                     <Plus size={14} />

@@ -1,4 +1,4 @@
-import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, DietaryTag, OrderFeedback, PrepStation, AccountingReport, LoyaltyProgramConfig } from './types';
+import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, DietaryTag, OrderFeedback, PrepStation, AccountingReport, LoyaltyProgramConfig, InventorySummary } from './types';
 import { BillSplitResult } from './utils/billSplitter';
 
 const API_BASE = '/api';
@@ -541,6 +541,44 @@ export async function updateDashboardLoyalty(
     throw new Error(data.message || 'Failed to update loyalty program');
   }
   return data.program;
+}
+
+// CP-47: Auto-86 Inventory Depletion API Client Methods
+export async function fetchDashboardInventory(token: string): Promise<InventorySummary> {
+  const res = await fetch(`${API_BASE}/dashboard/inventory`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to fetch inventory summary');
+  }
+  return data.inventory;
+}
+
+export async function updateItemStock(
+  token: string,
+  itemId: string,
+  payload: {
+    inventoryCount?: number;
+    restockDelta?: number;
+    trackInventory?: boolean;
+    lowStockThreshold?: number;
+    auto86Enabled?: boolean;
+  }
+): Promise<MenuItem> {
+  const res = await fetch(`${API_BASE}/dashboard/items/${itemId}/stock`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to update item stock');
+  }
+  return data.item;
 }
 
 

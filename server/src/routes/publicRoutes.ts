@@ -297,6 +297,19 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
   const estimatedPrepMinutes = Math.min(Math.max(basePrepTime + queueDelay, 5), 60);
   const estimatedReadyAt = new Date(Date.now() + estimatedPrepMinutes * 60 * 1000).toISOString();
 
+  // Deduct inventory and trigger auto-86 if stock hits 0 (CP-47)
+  const inventoryResult = db.deductInventory(
+    cafe.id,
+    orderItemSnapshots.map((i) => ({ menuItemId: i.menuItemId, quantity: i.quantity }))
+  );
+  if (!inventoryResult.success) {
+    res.status(400).json({
+      error: 'Inventory Depleted',
+      message: inventoryResult.error || 'One or more items in your cart are out of stock.',
+    });
+    return;
+  }
+
   // Persist order with snapshot taxRate & taxName, prep ETA, and loyalty properties (CP-40 & CP-46)
   const newOrder = db.createOrder({
     cafeId: cafe.id,

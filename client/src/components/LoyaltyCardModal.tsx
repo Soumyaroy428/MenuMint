@@ -363,3 +363,4 @@ export const LoyaltyCardModal: React.FC<LoyaltyCardModalProps> = ({
     </div>
   );
 };
+

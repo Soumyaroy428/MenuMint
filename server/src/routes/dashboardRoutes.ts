@@ -805,6 +805,45 @@ dashboardRouter.patch('/cafe/loyalty', (req: AuthenticatedRequest, res: Response
   });
 });
 
+// 21. CP-47: Get inventory summary, low-stock warnings & depleted items
+dashboardRouter.get('/inventory', (req: AuthenticatedRequest, res: Response): void => {
+  const cafeId = req.user!.cafeId;
+  const summary = db.getInventorySummary(cafeId);
+  res.json({
+    success: true,
+    inventory: summary,
+  });
+});
+
+// 22. CP-47: Update item stock count, restock, or configure Auto-86 thresholds
+dashboardRouter.patch('/items/:id/stock', (req: AuthenticatedRequest, res: Response): void => {
+  const { id } = req.params;
+  const cafeId = req.user!.cafeId;
+  const { inventoryCount, restockDelta, trackInventory, lowStockThreshold, auto86Enabled } = req.body;
+
+  const updated = db.updateItemStock(cafeId, id, {
+    inventoryCount,
+    restockDelta,
+    trackInventory,
+    lowStockThreshold,
+    auto86Enabled,
+  });
+
+  if (!updated) {
+    res.status(404).json({
+      error: 'Not Found',
+      message: 'Menu item not found or does not belong to your café.',
+    });
+    return;
+  }
+
+  res.json({
+    success: true,
+    message: `Stock for "${updated.name}" updated successfully.`,
+    item: updated,
+  });
+});
+
 
 
 

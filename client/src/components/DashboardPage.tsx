@@ -23,6 +23,7 @@ import {
   downloadAccountingCSV,
   fetchDashboardLoyaltySummary,
   updateDashboardLoyalty,
+  updateItemStock,
 } from '../api';
 import {
   Lock,
@@ -135,7 +136,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
   const [itemImageUrl, setItemImageUrl] = useState('');
   const [itemDietaryTags, setItemDietaryTags] = useState<DietaryTag[]>([]);
   const [itemPrepStation, setItemPrepStation] = useState<PrepStation>('BARISTA');
+  const [itemTrackInventory, setItemTrackInventory] = useState(false);
+  const [itemInventoryCount, setItemInventoryCount] = useState('10');
+  const [itemLowStockThreshold, setItemLowStockThreshold] = useState('3');
+  const [itemAuto86Enabled, setItemAuto86Enabled] = useState(true);
   const [itemSaving, setItemSaving] = useState(false);
+  const [inventoryFilter, setInventoryFilter] = useState<'all' | 'lowStock' | 'depleted'>('all');
 
   // Promo Code Modal State
   const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
@@ -566,6 +572,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
     setItemImageUrl('');
     setItemDietaryTags([]);
     setItemPrepStation('BARISTA');
+    setItemTrackInventory(false);
+    setItemInventoryCount('10');
+    setItemLowStockThreshold('3');
+    setItemAuto86Enabled(true);
     setIsItemModalOpen(true);
   };
 
@@ -578,7 +588,22 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
     setItemImageUrl(item.imageUrl || '');
     setItemDietaryTags(item.dietaryTags || []);
     setItemPrepStation(item.prepStation || 'BARISTA');
+    setItemTrackInventory(Boolean(item.trackInventory));
+    setItemInventoryCount(item.inventoryCount !== undefined ? String(item.inventoryCount) : '10');
+    setItemLowStockThreshold(item.lowStockThreshold !== undefined ? String(item.lowStockThreshold) : '3');
+    setItemAuto86Enabled(item.auto86Enabled ?? true);
     setIsItemModalOpen(true);
+  };
+
+  const handleQuickRestock = async (itemId: string, delta: number) => {
+    if (!token) return;
+    setActionError(null);
+    try {
+      const updated = await updateItemStock(token, itemId, { restockDelta: delta });
+      setMenuItems((prev) => prev.map((i) => (i.id === itemId ? updated : i)));
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to restock item');
+    }
   };
 
   const handleSaveItem = async (e: React.FormEvent) => {
@@ -599,6 +624,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
     setItemSaving(true);
     setActionError(null);
     try {
+      const inventoryPayload = {
+        trackInventory: itemTrackInventory,
+        inventoryCount: itemTrackInventory ? Math.max(0, parseInt(itemInventoryCount, 10) || 0) : undefined,
+        lowStockThreshold: itemTrackInventory ? Math.max(0, parseInt(itemLowStockThreshold, 10) || 0) : undefined,
+        auto86Enabled: itemTrackInventory ? itemAuto86Enabled : undefined,
+      };
+
       if (editingItem) {
         const updated = await updateMenuItem(token, editingItem.id, {
           name: itemName.trim(),
@@ -608,6 +640,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
           imageUrl: itemImageUrl.trim(),
           dietaryTags: itemDietaryTags,
           prepStation: itemPrepStation,
+          ...inventoryPayload,
         });
         setMenuItems((prev) => prev.map((i) => (i.id === editingItem.id ? updated : i)));
       } else {
@@ -619,6 +652,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
           imageUrl: itemImageUrl.trim(),
           dietaryTags: itemDietaryTags,
           prepStation: itemPrepStation,
+          ...inventoryPayload,
         });
         setMenuItems((prev) => [...prev, created]);
       }
@@ -1574,111 +1608,277 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
             </button>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {menuItems.map((item) => {
-              const category = categories.find((c) => c.id === item.categoryId);
-              return (
-                <div
-                  key={item.id}
-                  style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '0.85rem 1rem',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: 10,
-                    background: item.isAvailable ? '#ffffff' : '#f8fafc',
-                    gap: '0.75rem',
-                  }}
-                >
-                  <div style={{ flex: 1, minWidth: 200 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <strong style={{ fontSize: '1rem' }}>{item.name}</strong>
-                      <span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>
-                        {category?.name || 'Item'}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: '0.68rem',
-                          padding: '1px 6px',
-                          borderRadius: 4,
-                          background:
-                            (item.prepStation || 'BARISTA') === 'KITCHEN'
-                              ? '#fff7ed'
-                              : (item.prepStation || 'BARISTA') === 'BAKERY'
-                              ? '#fefce8'
-                              : '#eff6ff',
-                          color:
-                            (item.prepStation || 'BARISTA') === 'KITCHEN'
-                              ? '#c2410c'
-                              : (item.prepStation || 'BARISTA') === 'BAKERY'
-                              ? '#a16207'
-                              : '#1d4ed8',
-                          border: `1px solid ${
-                            (item.prepStation || 'BARISTA') === 'KITCHEN'
-                              ? '#ffedd5'
-                              : (item.prepStation || 'BAKERY') === 'BAKERY'
-                              ? '#fef9c3'
-                              : '#dbeafe'
-                          }`,
-                          fontWeight: 600,
-                        }}
-                      >
-                        {(item.prepStation || 'BARISTA') === 'KITCHEN'
-                          ? '🍳 Kitchen Grill'
-                          : (item.prepStation || 'BAKERY') === 'BAKERY'
-                          ? '🥐 Bakery'
-                          : '☕ Barista'}
-                      </span>
-                      {item.dietaryTags && item.dietaryTags.map((tag) => (
-                        <span key={tag} className="badge" style={{ fontSize: '0.65rem', background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0' }}>
-                          {tag === 'VEGAN' ? '🌱 Vegan' : tag === 'VEGETARIAN' ? '🥗 Veg' : tag === 'GLUTEN_FREE' ? '🌾 GF' : tag === 'NUT_FREE' ? '🥜 Nut-Free' : tag === 'SPICY' ? '🌶️ Spicy' : '⭐ Pick'}
-                        </span>
-                      ))}
-                    </div>
-                    {item.description && (
-                      <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 2 }}>{item.description}</p>
-                    )}
-                    <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#059669', marginTop: 4 }}>
-                      {currentUser.currencySymbol}{(item.price / 100).toFixed(2)}
-                    </div>
-                  </div>
+          {/* CP-47: Real-Time Inventory & Auto-86 Alerts Summary Bar */}
+          {(() => {
+            const tracked = menuItems.filter((i) => i.trackInventory);
+            const depleted = tracked.filter((i) => !i.isAvailable || i.inventoryCount === 0);
+            const lowStock = tracked.filter(
+              (i) => i.isAvailable && i.inventoryCount !== undefined && i.inventoryCount <= (i.lowStockThreshold || 3) && i.inventoryCount > 0
+            );
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <button
-                      className={`btn btn-sm ${item.isAvailable ? 'btn-primary' : 'btn-secondary'}`}
-                      style={{
-                        background: item.isAvailable ? '#10b981' : '#f1f5f9',
-                        color: item.isAvailable ? '#ffffff' : '#64748b',
-                        minWidth: 84,
-                      }}
-                      onClick={() => handleToggleAvailability(item.id, item.isAvailable)}
-                      title="Toggle availability"
-                    >
-                      {item.isAvailable ? 'In Stock' : 'Sold Out'}
-                    </button>
-
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      onClick={() => handleOpenEditModal(item)}
-                      title="Edit Item Details"
-                    >
-                      <Pencil size={13} />
-                    </button>
-
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      style={{ color: '#ef4444' }}
-                      onClick={() => handleDeleteItem(item.id, item.name)}
-                      title="Delete Item"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
+            return (
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.75rem',
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 10,
+                  padding: '0.75rem 1rem',
+                  marginBottom: '1rem',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Package size={16} color="#059669" />
+                  <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b' }}>
+                    Auto-86 Inventory Depletion Monitor:
+                  </span>
+                  <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                    {tracked.length} tracked items
+                  </span>
                 </div>
-              );
-            })}
+
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${inventoryFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem' }}
+                    onClick={() => setInventoryFilter('all')}
+                  >
+                    All Items ({menuItems.length})
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${inventoryFilter === 'lowStock' ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{
+                      fontSize: '0.75rem',
+                      padding: '0.2rem 0.6rem',
+                      borderColor: '#f59e0b',
+                      color: inventoryFilter === 'lowStock' ? '#ffffff' : '#b45309',
+                      background: inventoryFilter === 'lowStock' ? '#d97706' : '#fffbeb',
+                    }}
+                    onClick={() => setInventoryFilter(inventoryFilter === 'lowStock' ? 'all' : 'lowStock')}
+                  >
+                    ⚠️ Low Stock ({lowStock.length})
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${inventoryFilter === 'depleted' ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{
+                      fontSize: '0.75rem',
+                      padding: '0.2rem 0.6rem',
+                      borderColor: '#ef4444',
+                      color: inventoryFilter === 'depleted' ? '#ffffff' : '#b91c1c',
+                      background: inventoryFilter === 'depleted' ? '#dc2626' : '#fef2f2',
+                    }}
+                    onClick={() => setInventoryFilter(inventoryFilter === 'depleted' ? 'all' : 'depleted')}
+                  >
+                    🔴 86'd / Sold Out ({depleted.length})
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {menuItems
+              .filter((item) => {
+                if (inventoryFilter === 'lowStock') {
+                  return (
+                    item.trackInventory &&
+                    item.isAvailable &&
+                    item.inventoryCount !== undefined &&
+                    item.inventoryCount <= (item.lowStockThreshold || 3) &&
+                    item.inventoryCount > 0
+                  );
+                }
+                if (inventoryFilter === 'depleted') {
+                  return item.trackInventory && (!item.isAvailable || item.inventoryCount === 0);
+                }
+                return true;
+              })
+              .map((item) => {
+                const category = categories.find((c) => c.id === item.categoryId);
+                return (
+                  <div
+                    key={item.id}
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '0.85rem 1rem',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 10,
+                      background: item.isAvailable ? '#ffffff' : '#f8fafc',
+                      gap: '0.75rem',
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <strong style={{ fontSize: '1rem' }}>{item.name}</strong>
+                        <span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>
+                          {category?.name || 'Item'}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: '0.68rem',
+                            padding: '1px 6px',
+                            borderRadius: 4,
+                            background:
+                              (item.prepStation || 'BARISTA') === 'KITCHEN'
+                                ? '#fff7ed'
+                                : (item.prepStation || 'BARISTA') === 'BAKERY'
+                                ? '#fefce8'
+                                : '#eff6ff',
+                            color:
+                              (item.prepStation || 'BARISTA') === 'KITCHEN'
+                                ? '#c2410c'
+                                : (item.prepStation || 'BARISTA') === 'BAKERY'
+                                ? '#a16207'
+                                : '#1d4ed8',
+                            border: `1px solid ${
+                              (item.prepStation || 'BARISTA') === 'KITCHEN'
+                                ? '#ffedd5'
+                                : (item.prepStation || 'BAKERY') === 'BAKERY'
+                                ? '#fef9c3'
+                                : '#dbeafe'
+                            }`,
+                            fontWeight: 600,
+                          }}
+                        >
+                          {(item.prepStation || 'BARISTA') === 'KITCHEN'
+                            ? '🍳 Kitchen Grill'
+                            : (item.prepStation || 'BAKERY') === 'BAKERY'
+                            ? '🥐 Bakery'
+                            : '☕ Barista'}
+                        </span>
+                        {item.dietaryTags &&
+                          item.dietaryTags.map((tag) => (
+                            <span
+                              key={tag}
+                              className="badge"
+                              style={{ fontSize: '0.65rem', background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0' }}
+                            >
+                              {tag === 'VEGAN'
+                                ? '🌱 Vegan'
+                                : tag === 'VEGETARIAN'
+                                ? '🥗 Veg'
+                                : tag === 'GLUTEN_FREE'
+                                ? '🌾 GF'
+                                : tag === 'NUT_FREE'
+                                ? '🥜 Nut-Free'
+                                : tag === 'SPICY'
+                                ? '🌶️ Spicy'
+                                : '⭐ Pick'}
+                            </span>
+                          ))}
+
+                        {/* CP-47: Real-time stock status badge */}
+                        {item.trackInventory && (
+                          !item.isAvailable || item.inventoryCount === 0 ? (
+                            <span
+                              style={{
+                                fontSize: '0.68rem',
+                                padding: '1px 6px',
+                                borderRadius: 4,
+                                background: '#fee2e2',
+                                color: '#991b1b',
+                                border: '1px solid #fecaca',
+                                fontWeight: 800,
+                              }}
+                            >
+                              🔴 86'd (0 in stock)
+                            </span>
+                          ) : item.inventoryCount !== undefined && item.inventoryCount <= (item.lowStockThreshold || 3) ? (
+                            <span
+                              style={{
+                                fontSize: '0.68rem',
+                                padding: '1px 6px',
+                                borderRadius: 4,
+                                background: '#fffbeb',
+                                color: '#b45309',
+                                border: '1px solid #fcd34d',
+                                fontWeight: 800,
+                              }}
+                            >
+                              ⚠️ Low Stock ({item.inventoryCount})
+                            </span>
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: '0.68rem',
+                                padding: '1px 6px',
+                                borderRadius: 4,
+                                background: '#f0fdf4',
+                                color: '#166534',
+                                border: '1px solid #bbf7d0',
+                                fontWeight: 600,
+                              }}
+                            >
+                              📦 Stock: {item.inventoryCount}
+                            </span>
+                          )
+                        )}
+                      </div>
+                      {item.description && (
+                        <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 2 }}>{item.description}</p>
+                      )}
+                      <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#059669', marginTop: 4 }}>
+                        {currentUser.currencySymbol}{(item.price / 100).toFixed(2)}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      {/* CP-47: 1-Click Quick Restock */}
+                      {item.trackInventory && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', fontWeight: 700 }}
+                          onClick={() => handleQuickRestock(item.id, 10)}
+                          title="Quick Restock +10 units"
+                        >
+                          +10 Restock
+                        </button>
+                      )}
+
+                      <button
+                        className={`btn btn-sm ${item.isAvailable ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{
+                          background: item.isAvailable ? '#10b981' : '#f1f5f9',
+                          color: item.isAvailable ? '#ffffff' : '#64748b',
+                          minWidth: 84,
+                        }}
+                        onClick={() => handleToggleAvailability(item.id, item.isAvailable)}
+                        title="Toggle availability"
+                      >
+                        {item.isAvailable ? 'In Stock' : 'Sold Out'}
+                      </button>
+
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => handleOpenEditModal(item)}
+                        title="Edit Item Details"
+                      >
+                        <Pencil size={13} />
+                      </button>
+
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        style={{ color: '#ef4444' }}
+                        onClick={() => handleDeleteItem(item.id, item.name)}
+                        title="Delete Item"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
           </div>
         </div>
       ) : activeTab === 'promos' ? (
@@ -2803,6 +3003,67 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
                     );
                   })}
                 </div>
+              </div>
+
+              {/* Inventory & Auto-86 Depletion Controls (CP-47) */}
+              <div
+                style={{
+                  background: itemTrackInventory ? '#f8fafc' : '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 8,
+                  padding: '0.85rem',
+                  marginBottom: '1.25rem',
+                }}
+              >
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.88rem', color: '#0f172a', marginBottom: itemTrackInventory ? '0.75rem' : 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={itemTrackInventory}
+                    onChange={(e) => setItemTrackInventory(e.target.checked)}
+                  />
+                  <span>📦 Track Real-Time Inventory & Auto-86</span>
+                </label>
+
+                {itemTrackInventory && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Units on Hand *</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="9999"
+                          required
+                          className="form-input"
+                          value={itemInventoryCount}
+                          onChange={(e) => setItemInventoryCount(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Low Stock Alert (≤)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="50"
+                          required
+                          className="form-input"
+                          value={itemLowStockThreshold}
+                          onChange={(e) => setItemLowStockThreshold(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', color: '#475569', fontWeight: 600 }}>
+                      <input
+                        type="checkbox"
+                        checked={itemAuto86Enabled}
+                        onChange={(e) => setItemAuto86Enabled(e.target.checked)}
+                      />
+                      <span>Automatically 86 (mark Sold Out) when stock reaches 0</span>
+                    </label>
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', gap: '0.5rem' }}>
