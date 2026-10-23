@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Cafe, MenuCategory, MenuItem, CartItem, Order } from './types';
-import { fetchMenu, fetchCafes } from './api';
+import { fetchMenu, fetchCafes, trackOrder } from './api';
 import { Navbar } from './components/Navbar';
 import { MenuPage } from './components/MenuPage';
 import { CartDrawer } from './components/CartDrawer';
@@ -10,6 +10,7 @@ import { QRCodeModal } from './components/QRCodeModal';
 import { DashboardPage } from './components/DashboardPage';
 import { OrderHistoryModal } from './components/OrderHistoryModal';
 import { saveOrderToHistory, getCustomerOrderHistory } from './utils/orderHistory';
+import { playOrderReadyChime, flashTabTitle, sendBrowserNotification } from './utils/notifications';
 import { ShoppingBag, ArrowRight } from 'lucide-react';
 
 export function App() {
@@ -48,10 +49,43 @@ export function App() {
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [historyCount, setHistoryCount] = useState<number>(0);
+  const [orderReadyAlert, setOrderReadyAlert] = useState<{ orderRef: string; cafeName: string } | null>(null);
 
   useEffect(() => {
     setHistoryCount(getCustomerOrderHistory(cafeSlug).length);
   }, [cafeSlug, isHistoryModalOpen, confirmedOrder]);
+
+  // Background polling for active customer orders to trigger audio-visual ready alert (CP-42)
+  useEffect(() => {
+    const activeOrders = getCustomerOrderHistory(cafeSlug).filter((o) =>
+      ['PENDING', 'ACCEPTED', 'PREPARING'].includes(o.status)
+    );
+    if (activeOrders.length === 0) return;
+
+    const interval = setInterval(async () => {
+      for (const ord of activeOrders) {
+        try {
+          const fresh = await trackOrder(ord.orderRef);
+          if (fresh.status === 'READY') {
+            playOrderReadyChime();
+            if (typeof document !== 'undefined' && document.hidden) {
+              flashTabTitle(`🔔 (1) ORDER READY! - ${fresh.orderRef}`);
+            }
+            sendBrowserNotification(`🎉 Order Ready! (${fresh.orderRef})`, {
+              body: `Your order is hot and ready for pickup at ${fresh.cafeName || 'the café'}.`,
+            });
+            setOrderReadyAlert({ orderRef: fresh.orderRef, cafeName: fresh.cafeName || 'MenuMint Café' });
+            saveOrderToHistory(fresh, cafeSlug, fresh.cafeName || 'MenuMint Café');
+            setHistoryCount(getCustomerOrderHistory(cafeSlug).length);
+          }
+        } catch {
+          // ignore transient polling errors
+        }
+      }
+    }, 8000);
+
+    return () => clearInterval(interval);
+  }, [cafeSlug, confirmedOrder]);
 
   useEffect(() => {
     fetchCafes()
@@ -157,6 +191,55 @@ export function App() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {/* Live Order Ready Audio-Visual Banner (CP-42) */}
+      {orderReadyAlert && (
+        <aside
+          style={{
+            position: 'fixed',
+            top: 72,
+            right: 20,
+            zIndex: 1000,
+            background: '#16a34a',
+            color: '#ffffff',
+            padding: '0.85rem 1.25rem',
+            borderRadius: 12,
+            boxShadow: 'var(--shadow-lg)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            maxWidth: 420,
+            animation: 'fadeIn 0.3s ease',
+          }}
+        >
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, fontSize: '0.92rem' }}>
+              🎉 Order Ready: {orderReadyAlert.orderRef}
+            </div>
+            <div style={{ fontSize: '0.78rem', color: '#dcfce7', marginTop: 2 }}>
+              Your order is ready for pickup at {orderReadyAlert.cafeName}!
+            </div>
+          </div>
+          <button
+            className="btn btn-secondary btn-sm"
+            style={{ color: '#166534', background: '#ffffff', borderColor: '#ffffff', fontWeight: 700 }}
+            onClick={() => {
+              setTrackingOrderRef(orderReadyAlert.orderRef);
+              setIsTrackModalOpen(true);
+              setOrderReadyAlert(null);
+            }}
+          >
+            View
+          </button>
+          <button
+            onClick={() => setOrderReadyAlert(null)}
+            style={{ background: 'transparent', border: 'none', color: '#ffffff', cursor: 'pointer', padding: 2 }}
+            aria-label="Dismiss Alert"
+          >
+            ✕
+          </button>
+        </aside>
+      )}
+
       <Navbar
         currentTab={currentTab}
         setCurrentTab={setCurrentTab}

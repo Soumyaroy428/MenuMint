@@ -1,7 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Order } from '../types';
 import { trackOrder, submitOrderFeedback } from '../api';
-import { Search, X, CheckCircle, AlertCircle, RefreshCw, Printer, Clock, Star } from 'lucide-react';
+import { Search, X, CheckCircle, AlertCircle, RefreshCw, Printer, Clock, Star, Bell, BellRing } from 'lucide-react';
+import {
+  playOrderReadyChime,
+  flashTabTitle,
+  requestNotificationPermission,
+  sendBrowserNotification,
+} from '../utils/notifications';
 
 interface TrackOrderModalProps {
   isOpen: boolean;
@@ -41,6 +47,23 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
 
   // Live Timer for Countdown (CP-40)
   const [now, setNow] = useState<number>(Date.now());
+  const prevStatusRef = useRef<string | null>(null);
+
+  // Notification Permissions (CP-42)
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>(() =>
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'denied'
+  );
+
+  const handleEnableAlerts = async () => {
+    const perm = await requestNotificationPermission();
+    setNotifPermission(perm);
+    if (perm === 'granted') {
+      sendBrowserNotification('🔔 MenuMint Alerts Enabled', {
+        body: 'We will notify you immediately when your order is ready for pickup!',
+      });
+    }
+  };
+
   useEffect(() => {
     if (!isOpen) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -80,6 +103,19 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
     setError(null);
     try {
       const data = await trackOrder(ref.trim());
+
+      // Audio-Visual Alerts on transition to READY (CP-42)
+      if (prevStatusRef.current && prevStatusRef.current !== 'READY' && data.status === 'READY') {
+        playOrderReadyChime();
+        if (typeof document !== 'undefined' && document.hidden) {
+          flashTabTitle(`🔔 (1) ORDER READY! - ${data.orderRef}`);
+        }
+        sendBrowserNotification(`🎉 Order Ready! (${data.orderRef})`, {
+          body: `Your order is hot and ready for pickup at ${data.cafeName || 'the café'}.`,
+        });
+      }
+      prevStatusRef.current = data.status;
+
       setOrder(data);
       setLastRefreshed(new Date());
     } catch (err: any) {
@@ -295,6 +331,47 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
                     >
                       <RefreshCw size={10} className="spinning" /> Live Updates (5s)
                     </span>
+                  )}
+                  {isActive && typeof window !== 'undefined' && 'Notification' in window && (
+                    notifPermission === 'granted' ? (
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 3,
+                          fontSize: '0.7rem',
+                          fontWeight: 600,
+                          color: '#0284c7',
+                          background: '#e0f2fe',
+                          padding: '2px 8px',
+                          borderRadius: 12,
+                        }}
+                        title="Browser notifications active"
+                      >
+                        <BellRing size={10} /> Alerts On
+                      </span>
+                    ) : notifPermission === 'default' ? (
+                      <button
+                        type="button"
+                        onClick={handleEnableAlerts}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 3,
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          color: '#047857',
+                          background: '#d1fae5',
+                          border: '1px solid #6ee7b7',
+                          padding: '2px 8px',
+                          borderRadius: 12,
+                          cursor: 'pointer',
+                        }}
+                        title="Get notified when order is ready"
+                      >
+                        <Bell size={10} /> Enable Alerts
+                      </button>
+                    ) : null
                   )}
                 </div>
                 <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 2 }}>

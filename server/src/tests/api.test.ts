@@ -1109,6 +1109,56 @@ describe('MenuMint API Test Suite', () => {
     assert.strictEqual(crossTenantRes.body.unavailableItems[0].menuItemId, 'item-201');
     assert.strictEqual(crossTenantRes.body.unavailableItems[0].reason, 'Item no longer exists on menu');
   });
+
+  // -------------------------------------------------------------
+  // CP-42: Customer Inactive Tab Audio-Visual "Order Ready" Web Alert Engine
+  // -------------------------------------------------------------
+  test('CP-42: Order lifecycle transition to READY should be trackable with public reference', async () => {
+    // 1. Place a new order
+    const orderRes = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        customerName: 'Chime Listener',
+        orderType: 'takeaway',
+        items: [{ menuItemId: 'item-1', quantity: 1 }],
+      });
+
+    assert.strictEqual(orderRes.status, 201);
+    const order = orderRes.body.order;
+    assert.strictEqual(order.status, 'PENDING');
+
+    // 2. Kitchen accepts order
+    const acceptRes = await request(app)
+      .patch(`/api/dashboard/orders/${order.id}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'ACCEPTED' });
+    assert.strictEqual(acceptRes.status, 200);
+    assert.strictEqual(acceptRes.body.order.status, 'ACCEPTED');
+
+    // 3. Kitchen starts preparing order
+    const prepRes = await request(app)
+      .patch(`/api/dashboard/orders/${order.id}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'PREPARING' });
+    assert.strictEqual(prepRes.status, 200);
+    assert.strictEqual(prepRes.body.order.status, 'PREPARING');
+
+    // 4. Kitchen marks order READY (triggers client chime & notification)
+    const readyRes = await request(app)
+      .patch(`/api/dashboard/orders/${order.id}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'READY' });
+    assert.strictEqual(readyRes.status, 200);
+    assert.strictEqual(readyRes.body.order.status, 'READY');
+
+    // 5. Customer polling verifies status is READY
+    const trackRes = await request(app).get(`/api/orders/${order.orderRef}`);
+    assert.strictEqual(trackRes.status, 200);
+    assert.strictEqual(trackRes.body.order.status, 'READY');
+    assert.strictEqual(trackRes.body.order.cafeName, 'The Daily Grind Café');
+    assert.ok(trackRes.body.order.estimatedReadyAt);
+  });
 });
 
 

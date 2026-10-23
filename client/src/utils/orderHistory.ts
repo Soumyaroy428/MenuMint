@@ -59,3 +59,4 @@ export function clearCustomerOrderHistory(): void {
     console.error('Failed to clear customer order history:', err);
   }
 }
+
