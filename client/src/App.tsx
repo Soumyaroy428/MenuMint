@@ -8,6 +8,8 @@ import { OrderConfirmationModal } from './components/OrderConfirmationModal';
 import { TrackOrderModal } from './components/TrackOrderModal';
 import { QRCodeModal } from './components/QRCodeModal';
 import { DashboardPage } from './components/DashboardPage';
+import { OrderHistoryModal } from './components/OrderHistoryModal';
+import { saveOrderToHistory, getCustomerOrderHistory } from './utils/orderHistory';
 import { ShoppingBag, ArrowRight } from 'lucide-react';
 
 export function App() {
@@ -44,6 +46,12 @@ export function App() {
   const [isTrackModalOpen, setIsTrackModalOpen] = useState(false);
   const [trackingOrderRef, setTrackingOrderRef] = useState<string>('');
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [historyCount, setHistoryCount] = useState<number>(0);
+
+  useEffect(() => {
+    setHistoryCount(getCustomerOrderHistory(cafeSlug).length);
+  }, [cafeSlug, isHistoryModalOpen, confirmedOrder]);
 
   useEffect(() => {
     fetchCafes()
@@ -116,6 +124,29 @@ export function App() {
     setCart([]);
   };
 
+  const handleReorderSuccess = (itemsToAdd: { item: MenuItem; quantity: number }[], skippedNotice?: string) => {
+    setCart((prev) => {
+      const newCart = [...prev];
+      for (const entry of itemsToAdd) {
+        const existingIndex = newCart.findIndex((ci) => ci.item.id === entry.item.id);
+        if (existingIndex !== -1) {
+          newCart[existingIndex] = {
+            ...newCart[existingIndex],
+            quantity: newCart[existingIndex].quantity + entry.quantity,
+          };
+        } else {
+          newCart.push({ item: entry.item, quantity: entry.quantity });
+        }
+      }
+      return newCart;
+    });
+
+    if (skippedNotice) {
+      alert(skippedNotice);
+    }
+    setIsCartOpen(true);
+  };
+
   const totalCartCount = cart.reduce((sum, ci) => sum + ci.quantity, 0);
   const totalCartAmount = cart.reduce((sum, ci) => sum + ci.item.price * ci.quantity, 0);
 
@@ -136,6 +167,8 @@ export function App() {
           setIsTrackModalOpen(true);
         }}
         openQRModal={() => setIsQRModalOpen(true)}
+        openOrderHistoryModal={() => setIsHistoryModalOpen(true)}
+        pastOrderCount={historyCount}
         cafeName={cafe?.name || 'MenuMint'}
         availableCafes={availableCafes}
         activeCafeSlug={cafeSlug}
@@ -153,6 +186,8 @@ export function App() {
             onAddToCart={handleAddToCart}
             cartItemCounts={cartItemCounts}
             onRetry={loadMenu}
+            openOrderHistoryModal={() => setIsHistoryModalOpen(true)}
+            pastOrderCount={historyCount}
           />
         ) : (
           <DashboardPage
@@ -224,7 +259,9 @@ export function App() {
         isStoreOpen={cafe?.isOpen ?? true}
         storePauseReason={cafe?.pauseReason}
         onOrderSuccess={(order) => {
+          saveOrderToHistory(order, cafeSlug, cafe?.name || 'MenuMint Café');
           setConfirmedOrder(order);
+          setHistoryCount(getCustomerOrderHistory(cafeSlug).length);
           loadMenu();
         }}
       />
@@ -258,6 +295,20 @@ export function App() {
         onClose={() => setIsQRModalOpen(false)}
         cafeName={cafe?.name || 'MenuMint'}
         cafeSlug={cafeSlug}
+      />
+
+      {/* Customer Order History & 1-Click Reorder Modal (CP-41) */}
+      <OrderHistoryModal
+        isOpen={isHistoryModalOpen}
+        onClose={() => setIsHistoryModalOpen(false)}
+        cafeSlug={cafeSlug}
+        cafeName={cafe?.name || 'MenuMint'}
+        currencySymbol={cafe?.currencySymbol || '$'}
+        onTrackOrder={(orderRef) => {
+          setTrackingOrderRef(orderRef);
+          setIsTrackModalOpen(true);
+        }}
+        onReorderSuccess={handleReorderSuccess}
       />
     </div>
   );

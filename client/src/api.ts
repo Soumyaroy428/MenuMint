@@ -54,6 +54,27 @@ export async function trackOrder(orderRef: string): Promise<Order> {
   return data.order;
 }
 
+export async function checkReorderAvailability(
+  slug: string,
+  items: { menuItemId: string }[] | string[]
+): Promise<{
+  cafeId: string;
+  isStoreOpen: boolean;
+  availableItems: MenuItem[];
+  unavailableItems: { menuItemId: string; name?: string; reason: string }[];
+}> {
+  const res = await fetch(`${API_BASE}/cafes/${slug}/reorder-check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to check reorder availability');
+  }
+  return res.json();
+}
+
 export async function loginOwner(email: string, password: string): Promise<{ token: string; user: User }> {
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',

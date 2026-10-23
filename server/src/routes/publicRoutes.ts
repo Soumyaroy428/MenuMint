@@ -493,3 +493,45 @@ publicRouter.post('/orders/:orderRef/feedback', (req: Request, res: Response): v
   });
 });
 
+// 7. Check item availability for one-click reorder (CP-41)
+publicRouter.post('/cafes/:slug/reorder-check', (req: Request, res: Response): void => {
+  const { slug } = req.params;
+  const { items } = req.body;
+
+  const cafe = db.getCafeBySlug(slug);
+  if (!cafe) {
+    res.status(404).json({ error: 'Not Found', message: 'Café not found.' });
+    return;
+  }
+
+  if (!Array.isArray(items)) {
+    res.status(400).json({ error: 'Validation Error', message: 'items array is required.' });
+    return;
+  }
+
+  const allCafeItems = db.getItemsByCafeId(cafe.id);
+  const availableItems: any[] = [];
+  const unavailableItems: { menuItemId: string; name?: string; reason: string }[] = [];
+
+  for (const requested of items) {
+    const id = typeof requested === 'string' ? requested : requested?.menuItemId;
+    if (!id || typeof id !== 'string') continue;
+
+    const found = allCafeItems.find((i) => i.id === id);
+    if (!found) {
+      unavailableItems.push({ menuItemId: id, reason: 'Item no longer exists on menu' });
+    } else if (!found.isAvailable) {
+      unavailableItems.push({ menuItemId: id, name: found.name, reason: 'Item is currently sold out' });
+    } else {
+      availableItems.push(found);
+    }
+  }
+
+  res.json({
+    cafeId: cafe.id,
+    isStoreOpen: cafe.isOpen,
+    availableItems,
+    unavailableItems,
+  });
+});
+

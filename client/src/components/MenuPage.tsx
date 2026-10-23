@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Cafe, MenuCategory, MenuItem, DietaryTag } from '../types';
-import { Plus, Check, MapPin, Phone, Clock, Search, AlertCircle } from 'lucide-react';
+import { Plus, Check, MapPin, Phone, Clock, Search, AlertCircle, RotateCcw } from 'lucide-react';
 
 export const DIETARY_CONFIG: Record<DietaryTag, { label: string; emoji: string; bg: string; color: string; border: string }> = {
   VEGAN: { label: 'Vegan', emoji: '🌱', bg: '#ecfdf5', color: '#065f46', border: '#a7f3d0' },
@@ -20,6 +20,8 @@ interface MenuPageProps {
   onAddToCart: (item: MenuItem) => void;
   cartItemCounts: Record<string, number>;
   onRetry: () => void;
+  openOrderHistoryModal?: () => void;
+  pastOrderCount?: number;
 }
 
 export const MenuPage: React.FC<MenuPageProps> = ({
@@ -31,6 +33,8 @@ export const MenuPage: React.FC<MenuPageProps> = ({
   onAddToCart,
   cartItemCounts,
   onRetry,
+  openOrderHistoryModal,
+  pastOrderCount = 0,
 }) => {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [selectedDietaryFilter, setSelectedDietaryFilter] = useState<string>('all');
@@ -131,6 +135,39 @@ export const MenuPage: React.FC<MenuPageProps> = ({
                 {cafe.pauseReason || 'This café is taking a short pause for incoming orders. You may still browse items and check back shortly!'}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Quick Reorder Banner (CP-41) */}
+        {pastOrderCount > 0 && openOrderHistoryModal && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: '#f0fdf4',
+              border: '1px solid #bbf7d0',
+              borderRadius: 10,
+              padding: '0.6rem 0.9rem',
+              marginBottom: '1rem',
+              flexWrap: 'wrap',
+              gap: '0.5rem',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <RotateCcw size={15} color="#16a34a" />
+              <span style={{ fontSize: '0.85rem', color: '#166534', fontWeight: 600 }}>
+                Ordered here before? Tap to reorder your past favorites in 1 click!
+              </span>
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              style={{ fontSize: '0.78rem', padding: '0.25rem 0.65rem', background: '#16a34a', borderColor: '#16a34a' }}
+              onClick={openOrderHistoryModal}
+            >
+              Past Orders ({pastOrderCount})
+            </button>
           </div>
         )}
 

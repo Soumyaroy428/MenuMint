@@ -1,5 +1,5 @@
 import React from 'react';
-import { Coffee, ShoppingBag, Search, LayoutDashboard, QrCode, Store } from 'lucide-react';
+import { Coffee, ShoppingBag, Search, LayoutDashboard, QrCode, Store, History } from 'lucide-react';
 import { Cafe } from '../types';
 
 interface NavbarProps {
@@ -9,6 +9,8 @@ interface NavbarProps {
   openCart: () => void;
   openTrackModal: () => void;
   openQRModal: () => void;
+  openOrderHistoryModal?: () => void;
+  pastOrderCount?: number;
   cafeName?: string;
   availableCafes?: Cafe[];
   activeCafeSlug?: string;
@@ -22,6 +24,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   openCart,
   openTrackModal,
   openQRModal,
+  openOrderHistoryModal,
+  pastOrderCount = 0,
   cafeName = 'MenuMint',
   availableCafes = [],
   activeCafeSlug = 'daily-grind',
@@ -90,6 +94,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Search size={16} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
             Track Order
           </button>
+
+          {openOrderHistoryModal && (
+            <button className="nav-link" onClick={openOrderHistoryModal} title="View Past Orders & Reorder">
+              <History size={16} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
+              Past Orders {pastOrderCount > 0 ? `(${pastOrderCount})` : ''}
+            </button>
+          )}
 
           <button
             className={`nav-link ${currentTab === 'dashboard' ? 'active' : ''}`}

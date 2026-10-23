@@ -1050,6 +1050,65 @@ describe('MenuMint API Test Suite', () => {
     assert.strictEqual(forbidRes.status, 403);
     assert.strictEqual(forbidRes.body.error, 'Forbidden');
   });
+
+  // -------------------------------------------------------------
+  // CP-41: Customer Order History & One-Click Quick Reorder Engine
+  // -------------------------------------------------------------
+  test('CP-41: POST /api/cafes/:slug/reorder-check should check item availability and enforce tenant boundaries', async () => {
+    // 1. Check with a mix of in-stock item (item-1), sold-out item (item-7), and missing item (item-999)
+    const checkRes = await request(app)
+      .post('/api/cafes/daily-grind/reorder-check')
+      .send({
+        items: [
+          { menuItemId: 'item-1' },
+          { menuItemId: 'item-7' },
+          { menuItemId: 'item-99999' },
+        ],
+      });
+
+    assert.strictEqual(checkRes.status, 200);
+    assert.strictEqual(checkRes.body.cafeId, 'cafe-1');
+    assert.strictEqual(typeof checkRes.body.isStoreOpen, 'boolean');
+    assert.ok(Array.isArray(checkRes.body.availableItems));
+    assert.ok(Array.isArray(checkRes.body.unavailableItems));
+
+    // item-1 must be available
+    const availItem1 = checkRes.body.availableItems.find((i: any) => i.id === 'item-1');
+    assert.ok(availItem1, 'item-1 should be in availableItems');
+    assert.strictEqual(availItem1.name, 'Velvet Flat White');
+
+    // item-7 (sold out) must be in unavailableItems
+    const unavailItem7 = checkRes.body.unavailableItems.find((i: any) => i.menuItemId === 'item-7');
+    assert.ok(unavailItem7, 'item-7 should be in unavailableItems');
+    assert.strictEqual(unavailItem7.reason, 'Item is currently sold out');
+
+    // item-99999 (non-existent) must be in unavailableItems
+    const unavailItem999 = checkRes.body.unavailableItems.find((i: any) => i.menuItemId === 'item-99999');
+    assert.ok(unavailItem999, 'item-99999 should be in unavailableItems');
+    assert.strictEqual(unavailItem999.reason, 'Item no longer exists on menu');
+
+    // 2. Reject non-array items payload
+    const badRes = await request(app)
+      .post('/api/cafes/daily-grind/reorder-check')
+      .send({ items: 'not-an-array' });
+    assert.strictEqual(badRes.status, 400);
+    assert.strictEqual(badRes.body.error, 'Validation Error');
+
+    // 3. 404 for unknown cafe slug
+    const notFoundRes = await request(app)
+      .post('/api/cafes/non-existent-cafe/reorder-check')
+      .send({ items: [{ menuItemId: 'item-1' }] });
+    assert.strictEqual(notFoundRes.status, 404);
+
+    // 4. Tenant isolation: Cafe 2 item on Cafe 1 menu check should be marked as non-existent
+    const crossTenantRes = await request(app)
+      .post('/api/cafes/daily-grind/reorder-check')
+      .send({ items: [{ menuItemId: 'item-201' }] }); // item-201 belongs to cafe-2 (Bella Vista)
+    assert.strictEqual(crossTenantRes.status, 200);
+    assert.strictEqual(crossTenantRes.body.availableItems.length, 0);
+    assert.strictEqual(crossTenantRes.body.unavailableItems[0].menuItemId, 'item-201');
+    assert.strictEqual(crossTenantRes.body.unavailableItems[0].reason, 'Item no longer exists on menu');
+  });
 });
 
 

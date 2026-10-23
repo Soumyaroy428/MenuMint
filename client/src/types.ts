@@ -89,6 +89,27 @@ export interface Order {
   updatedAt?: string;
 }
 
+export interface CustomerPastOrder {
+  orderRef: string;
+  cafeId?: string;
+  cafeSlug: string;
+  cafeName: string;
+  currencySymbol: string;
+  total: number;
+  itemCount: number;
+  status: OrderStatus;
+  createdAt: string;
+  items: {
+    menuItemId: string;
+    name: string;
+    quantity: number;
+    unitPrice: number;
+    lineTotal: number;
+    dietaryTags?: DietaryTag[];
+    prepStation?: PrepStation;
+  }[];
+}
+
 export interface OrderFeedback {
   id: string;
   orderRef: string;
