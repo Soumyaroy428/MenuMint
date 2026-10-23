@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Cafe, MenuCategory, MenuItem, DietaryTag } from '../types';
-import { Plus, Check, MapPin, Phone, Clock, Search, AlertCircle, RotateCcw } from 'lucide-react';
+import { Plus, Check, MapPin, Phone, Clock, Search, AlertCircle, RotateCcw, Award } from 'lucide-react';
 
 export const DIETARY_CONFIG: Record<DietaryTag, { label: string; emoji: string; bg: string; color: string; border: string }> = {
   VEGAN: { label: 'Vegan', emoji: '🌱', bg: '#ecfdf5', color: '#065f46', border: '#a7f3d0' },
@@ -21,6 +21,7 @@ interface MenuPageProps {
   cartItemCounts: Record<string, number>;
   onRetry: () => void;
   openOrderHistoryModal?: () => void;
+  openLoyaltyModal?: () => void;
   pastOrderCount?: number;
 }
 
@@ -34,6 +35,7 @@ export const MenuPage: React.FC<MenuPageProps> = ({
   cartItemCounts,
   onRetry,
   openOrderHistoryModal,
+  openLoyaltyModal,
   pastOrderCount = 0,
 }) => {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
@@ -135,6 +137,64 @@ export const MenuPage: React.FC<MenuPageProps> = ({
                 {cafe.pauseReason || 'This café is taking a short pause for incoming orders. You may still browse items and check back shortly!'}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Digital Loyalty Stamp Card Banner (CP-46) */}
+        {cafe.loyaltyProgram?.enabled && openLoyaltyModal && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
+              border: '1px solid #fde68a',
+              borderRadius: 10,
+              padding: '0.65rem 1rem',
+              marginBottom: '1rem',
+              flexWrap: 'wrap',
+              gap: '0.5rem',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <div
+                style={{
+                  background: '#fef08a',
+                  borderRadius: '50%',
+                  width: 32,
+                  height: 32,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Award size={18} color="#b45309" />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.88rem', color: '#92400e', fontWeight: 700 }}>
+                  Digital Stamp Card Active!
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#b45309' }}>
+                  Collect {cafe.loyaltyProgram.stampsTarget} stamps with your phone number to earn {cafe.currencySymbol}{(cafe.loyaltyProgram.rewardDiscountCents / 100).toFixed(2)} off your order!
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              style={{
+                fontSize: '0.78rem',
+                padding: '0.3rem 0.75rem',
+                background: '#ffffff',
+                borderColor: '#f59e0b',
+                color: '#b45309',
+                fontWeight: 700,
+              }}
+              onClick={openLoyaltyModal}
+            >
+              View My Stamps
+            </button>
           </div>
         )}
 

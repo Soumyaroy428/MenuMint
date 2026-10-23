@@ -3,8 +3,8 @@
 **Project:** MenuMint — Multi-tenant Digital Menu & Ordering SaaS for Cafés & Restaurants  
 **Live Production URL:** [https://menu-ordering-saas.vercel.app](https://menu-ordering-saas.vercel.app)  
 **Repository:** `https://github.com/Soumyaroy428/MenuMint.git` (Branch: `main`)  
-**Latest Deployed Commit:** `b8b8106`  
-**Automated Test Suite:** 47 / 47 Tests Passing (100% Pass Rate)  
+**Latest Deployed Commit:** `1e14397`  
+**Automated Test Suite:** 48 / 48 Tests Passing (100% Pass Rate)  
 **Generated On:** October 23, 2026  
 
 ---
@@ -14,7 +14,7 @@ MenuMint is a lightweight, mobile-first SaaS designed for independent cafés and
 
 ---
 
-## ✅ Completed Checkpoints Registry (CP-00 through CP-45)
+## ✅ Completed Checkpoints Registry (CP-00 through CP-46)
 
 ### 🏗️ Phase 1: Baseline Architecture & MVP Foundation (CP-00 – CP-24)
 *Commit: `fbff90a`, `e38a3ed`, `2e44c28`*
@@ -135,15 +135,25 @@ MenuMint is a lightweight, mobile-first SaaS designed for independent cafés and
   - Tax Compliance Breakdown Table: itemized taxable base and collected liabilities grouped by tax rate and name (e.g. Sales Tax 8.25%, VAT 10.0%).
   - Printable Official Tax Statement: browser-formatted merchant tax report for accounting and audit compliance (`handlePrintTaxStatement`).
   - Full CSV export with period totals and tax liability summary compatible with QuickBooks, Xero, and Excel.
+- **CP-46 (Customer Loyalty Points & Digital Stamp Card Engine):**
+  - Seamless phone-number-based loyalty engine requiring zero app downloads or accounts.
+  - Configurable loyalty program parameters (`LoyaltyProgramConfig`): program activation toggle, target stamps to unlock reward (e.g. 5 or 8 stamps), reward discount amount (e.g. $5.00 off), and customizable voucher description.
+  - Multi-tenant customer loyalty accounts (`LoyaltyAccount`) with automatic digits-only phone normalization (`normalizePhone`) ensuring `(555) 444-3322` and `5554443322` link to the same account.
+  - Public balance & stamp inquiry endpoint (`GET /api/cafes/:slug/loyalty?phone=...`) returning stamp progress percentage, available vouchers, and lifetime stats.
+  - Automatic order stamp accrual: each completed order earns +1 stamp; reaching target resets current cycle and automatically deposits an active discount voucher.
+  - Cart checkout voucher redemption: customers with available vouchers can toggle `useLoyaltyReward: true` to instantly deduct the configured reward discount from their order subtotal.
+  - Public visual stamp card modal (`LoyaltyCardModal.tsx`) with animated stamp rings, reward voucher highlights, and phone memory.
+  - Menu Hero banner and Navbar shortcut directing customers to check their stamp balance.
+  - Owner Dashboard "Stamp Card & Loyalty" tab featuring 4 KPI metric cards (Enrolled Members, Stamps Issued, Rewards Waiting, Vouchers Redeemed), settings configuration form, and live digital card preview.
+  - Strict multi-tenant isolation preventing stamps and vouchers earned at Café 1 from being visible or redeemed at Café 2.
 
 ---
 
-## 🔮 Upcoming Feature Checkpoints (CP-46 – CP-50)
+## 🔮 Upcoming Feature Checkpoints (CP-47 – CP-50)
 
 | Checkpoint | Status | Description |
 | :--- | :---: | :--- |
-| **CP-46** | *Next Up* | **Customer Loyalty Points & Digital Stamp Card**<br>Configurable loyalty program rewarding repeat visits. |
-| **CP-47** | *Queued* | **Auto-86 Inventory Depletion Alerts**<br>Automatic item exhaustion triggers based on threshold volume. |
+| **CP-47** | *Next Up* | **Auto-86 Inventory Depletion Alerts**<br>Automatic item exhaustion triggers based on threshold volume. |
 | **CP-48** | *Queued* | **Multi-Language Menu Localization**<br>Instant language switcher (English, Spanish, French, Italian). |
 | **CP-49** | *Queued* | **Scheduled Advance Ordering & Pickup Windows**<br>Curated time-slot selection for scheduled takeaway orders. |
 | **CP-50** | *Queued* | **Golden Master Production Audit & Performance Benchmark**<br>Comprehensive security, Lighthouse performance, and multi-tenant audit. |
@@ -151,7 +161,7 @@ MenuMint is a lightweight, mobile-first SaaS designed for independent cafés and
 ---
 
 ## 🧪 Current Verification Metrics
-- **Automated Tests:** 47 / 47 passing (`npm test`, 100% pass rate)
+- **Automated Tests:** 48 / 48 passing (`npm test`, 100% pass rate)
 - **Frontend Typecheck:** 0 errors (`tsc -p client/tsconfig.json`)
 - **Backend Typecheck:** 0 errors (`tsc -p server/tsconfig.json`)
 - **Vite Production Bundle:** Clean build, gzip optimized (`342 kB`)

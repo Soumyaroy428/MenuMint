@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CartItem, OrderType, Order } from '../types';
-import { X, Trash2, Plus, Minus, ShoppingBag, Info, AlertTriangle, ArrowRight, Tag, Heart, Users } from 'lucide-react';
-import { submitOrder, validatePromoCode } from '../api';
+import { X, Trash2, Plus, Minus, ShoppingBag, Info, AlertTriangle, ArrowRight, Tag, Heart, Users, Gift } from 'lucide-react';
+import { submitOrder, validatePromoCode, fetchCafeLoyalty } from '../api';
 import { BillSplitModal } from './BillSplitModal';
+import { LoyaltyCardModal } from './LoyaltyCardModal';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -62,11 +63,46 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   // Dine-In Bill Split Modal (CP-44)
   const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
 
+  // Customer Loyalty Rewards & Stamp Card State (CP-46)
+  const [useLoyaltyReward, setUseLoyaltyReward] = useState<boolean>(false);
+  const [loyaltyData, setLoyaltyData] = useState<{
+    enabled: boolean;
+    program: any;
+    account: any;
+  } | null>(null);
+  const [isLoyaltyModalOpen, setIsLoyaltyModalOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const clean = customerPhone.replace(/\D/g, '');
+    if (clean.length >= 7) {
+      fetchCafeLoyalty(cafeSlug, clean)
+        .then((data) => {
+          setLoyaltyData(data);
+          if (data.account && data.account.rewardsAvailable > 0) {
+            setUseLoyaltyReward(true);
+          }
+        })
+        .catch(() => {});
+    } else {
+      setLoyaltyData(null);
+      setUseLoyaltyReward(false);
+    }
+  }, [customerPhone, cafeSlug]);
+
   if (!isOpen) return null;
 
   const rawSubtotal = items.reduce((acc, ci) => acc + ci.item.price * ci.quantity, 0);
   const discountAmount = appliedPromo ? Math.min(rawSubtotal, appliedPromo.discountAmount) : 0;
-  const subtotal = Math.max(0, rawSubtotal - discountAmount);
+
+  // Loyalty reward discount calculation (CP-46)
+  const remainingForLoyalty = Math.max(0, rawSubtotal - discountAmount);
+  const loyaltyDiscountAmount =
+    useLoyaltyReward && loyaltyData?.account?.rewardsAvailable > 0 && loyaltyData?.program
+      ? Math.min(remainingForLoyalty, loyaltyData.program.rewardDiscountCents || 500)
+      : 0;
+
+  const totalDiscount = discountAmount + loyaltyDiscountAmount;
+  const subtotal = Math.max(0, rawSubtotal - totalDiscount);
   const effectiveTaxRate = typeof taxRate === 'number' ? taxRate : 8.25;
   const effectiveTaxName = taxName || 'Estimated Tax';
   const estimatedTax = Math.round((subtotal * effectiveTaxRate) / 100);
@@ -144,6 +180,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         notes: notes.trim() || undefined,
         promoCode: appliedPromo ? appliedPromo.code : undefined,
         tip: tipAmount > 0 ? tipAmount : undefined,
+        useLoyaltyReward: useLoyaltyReward && loyaltyDiscountAmount > 0,
         items: items.map((ci) => ({
           menuItemId: ci.item.id,
           quantity: ci.quantity,
@@ -276,7 +313,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 />
               </div>
 
-              {orderType === 'dine-in' ? (
+              {orderType === 'dine-in' && (
                 <div className="form-group" style={{ marginBottom: '0.5rem' }}>
                   <label className="form-label">Table Number</label>
                   <input
@@ -287,16 +324,63 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     onChange={(e) => setTableNumber(e.target.value)}
                   />
                 </div>
-              ) : (
-                <div className="form-group" style={{ marginBottom: '0.5rem' }}>
-                  <label className="form-label">Phone (Optional)</label>
-                  <input
-                    type="tel"
-                    placeholder="e.g. (555) 019-2834"
-                    className="form-input"
-                    value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
-                  />
+              )}
+
+              <div className="form-group" style={{ marginBottom: '0.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label className="form-label">Phone (for Stamp Card & Alerts)</label>
+                  {loyaltyData?.account && (
+                    <button
+                      type="button"
+                      onClick={() => setIsLoyaltyModalOpen(true)}
+                      style={{ border: 'none', background: 'none', color: '#059669', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                    >
+                      ☕ {loyaltyData.account.stampsCount}/{loyaltyData.account.stampsTarget} Stamps
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="tel"
+                  placeholder="e.g. (555) 321-7890"
+                  className="form-input"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                />
+              </div>
+
+              {/* Unlocked Loyalty Reward Voucher Callout */}
+              {loyaltyData?.account && loyaltyData.account.rewardsAvailable > 0 && (
+                <div
+                  style={{
+                    background: '#fef3c7',
+                    border: '1px solid #f59e0b',
+                    borderRadius: 8,
+                    padding: '0.65rem 0.75rem',
+                    marginBottom: '0.5rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Gift size={16} color="#b45309" />
+                    <div>
+                      <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#92400e' }}>
+                        🎁 Loyalty Reward Available!
+                      </span>
+                      <div style={{ fontSize: '0.72rem', color: '#b45309' }}>
+                        {loyaltyData.program.rewardDescription || `${currencySymbol}${(loyaltyData.program.rewardDiscountCents / 100).toFixed(2)} off order`}
+                      </div>
+                    </div>
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 800, color: '#92400e' }}>
+                    <input
+                      type="checkbox"
+                      checked={useLoyaltyReward}
+                      onChange={(e) => setUseLoyaltyReward(e.target.checked)}
+                    />
+                    <span>Apply</span>
+                  </label>
                 </div>
               )}
             </div>
@@ -433,6 +517,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <span>- {currencySymbol}{(discountAmount / 100).toFixed(2)}</span>
                 </div>
               )}
+              {loyaltyDiscountAmount > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#b45309', fontWeight: 700, marginBottom: 2 }}>
+                  <span>🎁 Loyalty Reward Voucher</span>
+                  <span>- {currencySymbol}{(loyaltyDiscountAmount / 100).toFixed(2)}</span>
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', marginBottom: 4 }}>
                 <span>{effectiveTaxName} ({effectiveTaxRate}%)</span>
                 <span>{currencySymbol}{(estimatedTax / 100).toFixed(2)}</span>
@@ -535,6 +625,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         taxCents={estimatedTax}
         tipCents={tipAmount}
         discountCents={discountAmount}
+      />
+
+      {/* Customer Loyalty Stamp Card Modal (CP-46) */}
+      <LoyaltyCardModal
+        isOpen={isLoyaltyModalOpen}
+        onClose={() => setIsLoyaltyModalOpen(false)}
+        cafeSlug={cafeSlug}
+        cafeName={cafeSlug}
+        currencySymbol={currencySymbol}
+        initialPhone={customerPhone}
+        onSelectReward={() => setUseLoyaltyReward(true)}
       />
     </div>
   );

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Coffee, ShoppingBag, Search, LayoutDashboard, QrCode, Store, History } from 'lucide-react';
+import { Coffee, ShoppingBag, Search, LayoutDashboard, QrCode, Store, History, Award } from 'lucide-react';
 import { Cafe } from '../types';
 
 interface NavbarProps {
@@ -10,6 +10,7 @@ interface NavbarProps {
   openTrackModal: () => void;
   openQRModal: () => void;
   openOrderHistoryModal?: () => void;
+  openLoyaltyModal?: () => void;
   pastOrderCount?: number;
   cafeName?: string;
   availableCafes?: Cafe[];
@@ -25,6 +26,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   openTrackModal,
   openQRModal,
   openOrderHistoryModal,
+  openLoyaltyModal,
   pastOrderCount = 0,
   cafeName = 'MenuMint',
   availableCafes = [],
@@ -99,6 +101,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button className="nav-link" onClick={openOrderHistoryModal} title="View Past Orders & Reorder">
               <History size={16} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
               Past Orders {pastOrderCount > 0 ? `(${pastOrderCount})` : ''}
+            </button>
+          )}
+
+          {openLoyaltyModal && (
+            <button className="nav-link" onClick={openLoyaltyModal} title="Digital Stamp Card & Rewards (CP-46)">
+              <Award size={16} color="#d97706" style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
+              Stamp Card
             </button>
           )}
 

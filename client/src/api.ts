@@ -1,4 +1,4 @@
-import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, DietaryTag, OrderFeedback, PrepStation, AccountingReport } from './types';
+import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, DietaryTag, OrderFeedback, PrepStation, AccountingReport, LoyaltyProgramConfig } from './types';
 import { BillSplitResult } from './utils/billSplitter';
 
 const API_BASE = '/api';
@@ -30,8 +30,22 @@ export async function submitOrder(orderData: {
   notes?: string;
   promoCode?: string;
   tip?: number;
+  useLoyaltyReward?: boolean;
   items: { menuItemId: string; quantity: number }[];
-}): Promise<{ success: boolean; order: Order; message: string }> {
+}): Promise<{
+  success: boolean;
+  order: Order;
+  message: string;
+  loyalty?: {
+    stampEarned: boolean;
+    rewardUnlocked: boolean;
+    rewardRedeemed: boolean;
+    discountAmount: number;
+    stampsCount: number;
+    stampsTarget: number;
+    rewardsAvailable: number;
+  } | null;
+}> {
   const res = await fetch(`${API_BASE}/orders`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -464,6 +478,69 @@ export async function downloadAccountingCSV(
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+export async function fetchCafeLoyalty(
+  slug: string,
+  phone?: string
+): Promise<{
+  enabled: boolean;
+  program: LoyaltyProgramConfig;
+  account: {
+    stampsCount: number;
+    stampsTarget: number;
+    rewardsAvailable: number;
+    totalStampsEarned: number;
+    totalRewardsRedeemed: number;
+    customerName?: string;
+    progressPct: number;
+  } | null;
+}> {
+  const query = phone ? `?phone=${encodeURIComponent(phone)}` : '';
+  const res = await fetch(`${API_BASE}/cafes/${slug}/loyalty${query}`);
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to fetch loyalty status');
+  }
+  return data;
+}
+
+export async function fetchDashboardLoyaltySummary(token: string): Promise<{
+  program: LoyaltyProgramConfig;
+  metrics: {
+    totalMembers: number;
+    totalStampsIssued: number;
+    rewardsAvailable: number;
+    totalRewardsRedeemed: number;
+  };
+}> {
+  const res = await fetch(`${API_BASE}/dashboard/loyalty/summary`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to fetch loyalty summary');
+  }
+  return data;
+}
+
+export async function updateDashboardLoyalty(
+  token: string,
+  config: Partial<LoyaltyProgramConfig>
+): Promise<LoyaltyProgramConfig> {
+  const res = await fetch(`${API_BASE}/dashboard/cafe/loyalty`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(config),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to update loyalty program');
+  }
+  return data.program;
 }
 
 

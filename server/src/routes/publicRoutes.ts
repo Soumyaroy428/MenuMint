@@ -48,6 +48,7 @@ publicRouter.get('/cafes/:slug', (req: Request, res: Response): void => {
       taxName: cafe.taxName,
       isOpen: cafe.isOpen,
       pauseReason: cafe.pauseReason,
+      loyaltyProgram: cafe.loyaltyProgram,
     },
   });
 });
@@ -82,6 +83,7 @@ publicRouter.get('/cafes/:slug/menu', (req: Request, res: Response): void => {
       taxName: cafe.taxName,
       isOpen: cafe.isOpen,
       pauseReason: cafe.pauseReason,
+      loyaltyProgram: cafe.loyaltyProgram,
     },
     categories,
     items,
@@ -90,7 +92,7 @@ publicRouter.get('/cafes/:slug/menu', (req: Request, res: Response): void => {
 
 // 3. Submit an order (Server-authoritative calculation and validation)
 publicRouter.post('/orders', (req: Request, res: Response): void => {
-  const { cafeSlug, cafeId, orderType, customerName, customerPhone, tableNumber, notes, items, promoCode, tip } = req.body;
+  const { cafeSlug, cafeId, orderType, customerName, customerPhone, tableNumber, notes, items, promoCode, tip, useLoyaltyReward } = req.body;
 
   // Resolve café
   const cafe = cafeSlug ? db.getCafeBySlug(cafeSlug) : db.getCafeById(cafeId);
@@ -251,8 +253,27 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
     calculatedTip = numericTip;
   }
 
+  // Process Loyalty stamp and/or reward redemption (CP-46)
+  let loyaltyDiscountAmount = 0;
+  let loyaltyResult: any = null;
+
+  if (customerPhone && cafe.loyaltyProgram?.enabled) {
+    loyaltyResult = db.recordLoyaltyOrder(
+      cafe.id,
+      String(customerPhone),
+      customerName,
+      Boolean(useLoyaltyReward)
+    );
+    if (loyaltyResult.rewardRedeemed) {
+      const remainingSubtotal = Math.max(0, calculatedSubtotal - discountAmount);
+      loyaltyDiscountAmount = Math.min(remainingSubtotal, loyaltyResult.discountCents);
+    }
+  }
+
+  const totalDiscount = discountAmount + loyaltyDiscountAmount;
+
   // Calculate regional tax on post-discount subtotal (CP-38)
-  const discountedSubtotal = Math.max(0, calculatedSubtotal - discountAmount);
+  const discountedSubtotal = Math.max(0, calculatedSubtotal - totalDiscount);
   const effectiveTaxRate = typeof cafe.taxRate === 'number' ? cafe.taxRate : 8.25;
   const effectiveTaxName = cafe.taxName || 'Sales Tax';
   const calculatedTax = Math.round((discountedSubtotal * effectiveTaxRate) / 100);
@@ -276,7 +297,7 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
   const estimatedPrepMinutes = Math.min(Math.max(basePrepTime + queueDelay, 5), 60);
   const estimatedReadyAt = new Date(Date.now() + estimatedPrepMinutes * 60 * 1000).toISOString();
 
-  // Persist order with snapshot taxRate & taxName and prep ETA (CP-40)
+  // Persist order with snapshot taxRate & taxName, prep ETA, and loyalty properties (CP-40 & CP-46)
   const newOrder = db.createOrder({
     cafeId: cafe.id,
     status: 'PENDING',
@@ -287,8 +308,10 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
     notes: notes ? String(notes).trim().slice(0, 300) : undefined,
     items: orderItemSnapshots,
     subtotal: calculatedSubtotal,
-    discount: discountAmount > 0 ? discountAmount : undefined,
+    discount: totalDiscount > 0 ? totalDiscount : undefined,
     promoCode: appliedPromoCode,
+    loyaltyDiscount: loyaltyDiscountAmount > 0 ? loyaltyDiscountAmount : undefined,
+    loyaltyStampEarned: loyaltyResult ? loyaltyResult.stampEarned : undefined,
     tip: calculatedTip > 0 ? calculatedTip : undefined,
     tax: calculatedTax,
     taxRate: effectiveTaxRate,
@@ -313,6 +336,8 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
       subtotal: newOrder.subtotal,
       discount: newOrder.discount,
       promoCode: newOrder.promoCode,
+      loyaltyDiscount: newOrder.loyaltyDiscount,
+      loyaltyStampEarned: newOrder.loyaltyStampEarned,
       tip: newOrder.tip,
       tax: newOrder.tax,
       taxRate: newOrder.taxRate,
@@ -324,6 +349,17 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
       currencySymbol: cafe.currencySymbol,
       createdAt: newOrder.createdAt,
     },
+    loyalty: loyaltyResult
+      ? {
+          stampEarned: loyaltyResult.stampEarned,
+          rewardUnlocked: loyaltyResult.rewardUnlocked,
+          rewardRedeemed: loyaltyResult.rewardRedeemed,
+          discountAmount: loyaltyDiscountAmount,
+          stampsCount: loyaltyResult.account.stampsCount,
+          stampsTarget: loyaltyResult.account.stampsTarget,
+          rewardsAvailable: loyaltyResult.account.rewardsAvailable,
+        }
+      : null,
   });
 });
 
@@ -356,6 +392,8 @@ publicRouter.get('/orders/:orderRef', (req: Request, res: Response): void => {
       subtotal: order.subtotal,
       discount: order.discount,
       promoCode: order.promoCode,
+      loyaltyDiscount: order.loyaltyDiscount,
+      loyaltyStampEarned: order.loyaltyStampEarned,
       tip: order.tip,
       tax: order.tax,
       taxRate: order.taxRate,
@@ -581,6 +619,47 @@ publicRouter.post('/cafes/:slug/reorder-check', (req: Request, res: Response): v
     isStoreOpen: cafe.isOpen,
     availableItems,
     unavailableItems,
+  });
+});
+
+// 8. CP-46: Check customer digital stamp card & loyalty reward balance
+publicRouter.get('/cafes/:slug/loyalty', (req: Request, res: Response): void => {
+  const { slug } = req.params;
+  const { phone } = req.query;
+
+  const cafe = db.getCafeBySlug(slug);
+  if (!cafe) {
+    res.status(404).json({ error: 'Not Found', message: 'Café not found.' });
+    return;
+  }
+
+  const program = cafe.loyaltyProgram || {
+    enabled: false,
+    stampsTarget: 5,
+    rewardDiscountCents: 500,
+    rewardDescription: 'Loyalty program currently disabled',
+  };
+
+  let account: any = null;
+  if (program.enabled && typeof phone === 'string' && phone.trim()) {
+    account = db.getOrCreateLoyaltyAccount(cafe.id, phone.trim());
+  }
+
+  res.json({
+    success: true,
+    enabled: program.enabled,
+    program,
+    account: account
+      ? {
+          stampsCount: account.stampsCount,
+          stampsTarget: account.stampsTarget,
+          rewardsAvailable: account.rewardsAvailable,
+          totalStampsEarned: account.totalStampsEarned,
+          totalRewardsRedeemed: account.totalRewardsRedeemed,
+          customerName: account.customerName,
+          progressPct: Math.min(100, Math.round((account.stampsCount / account.stampsTarget) * 100)),
+        }
+      : null,
   });
 });
 

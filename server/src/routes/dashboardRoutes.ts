@@ -729,6 +729,82 @@ dashboardRouter.get('/accounting/export', (req: AuthenticatedRequest, res: Respo
   res.send(csvContent);
 });
 
+// 19. CP-46: Get café loyalty program metrics and summary
+dashboardRouter.get('/loyalty/summary', (req: AuthenticatedRequest, res: Response): void => {
+  const cafeId = req.user!.cafeId;
+  const cafe = db.getCafeById(cafeId);
+  const summary = db.getLoyaltySummary(cafeId);
+
+  res.json({
+    success: true,
+    program: cafe?.loyaltyProgram || {
+      enabled: false,
+      stampsTarget: 5,
+      rewardDiscountCents: 500,
+      rewardDescription: 'Free Coffee or Pastry (Up to $5.00)',
+    },
+    metrics: summary,
+  });
+});
+
+// 20. CP-46: Update café loyalty program configuration
+dashboardRouter.patch('/cafe/loyalty', (req: AuthenticatedRequest, res: Response): void => {
+  const cafeId = req.user!.cafeId;
+  const { enabled, stampsTarget, rewardDiscountCents, rewardDescription } = req.body;
+
+  const updates: any = {};
+  if (typeof enabled === 'boolean') {
+    updates.enabled = enabled;
+  }
+
+  if (stampsTarget !== undefined) {
+    const target = Number(stampsTarget);
+    if (!Number.isInteger(target) || target < 2 || target > 20) {
+      res.status(400).json({
+        error: 'Validation Error',
+        message: 'Stamps target must be an integer between 2 and 20.',
+      });
+      return;
+    }
+    updates.stampsTarget = target;
+  }
+
+  if (rewardDiscountCents !== undefined) {
+    const discount = Number(rewardDiscountCents);
+    if (!Number.isInteger(discount) || discount < 50 || discount > 50000) {
+      res.status(400).json({
+        error: 'Validation Error',
+        message: 'Reward discount must be between $0.50 (50¢) and $500.00 (50,000¢).',
+      });
+      return;
+    }
+    updates.rewardDiscountCents = discount;
+  }
+
+  if (rewardDescription !== undefined) {
+    if (typeof rewardDescription !== 'string' || rewardDescription.trim().length === 0) {
+      res.status(400).json({
+        error: 'Validation Error',
+        message: 'Reward description cannot be empty.',
+      });
+      return;
+    }
+    updates.rewardDescription = rewardDescription.trim().slice(0, 100);
+  }
+
+  const updatedCafe = db.updateLoyaltyProgram(cafeId, updates);
+  if (!updatedCafe) {
+    res.status(404).json({ error: 'Not Found', message: 'Café not found.' });
+    return;
+  }
+
+  res.json({
+    success: true,
+    message: 'Loyalty program configuration updated successfully.',
+    program: updatedCafe.loyaltyProgram,
+  });
+});
+
 
 
 

@@ -2,6 +2,26 @@ export type OrderStatus = 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMP
 
 export type OrderType = 'dine-in' | 'takeaway';
 
+export interface LoyaltyProgramConfig {
+  enabled: boolean;
+  stampsTarget: number;
+  rewardDiscountCents: number;
+  rewardDescription: string;
+}
+
+export interface LoyaltyAccount {
+  id: string;
+  cafeId: string;
+  customerPhone: string;
+  customerName?: string;
+  stampsCount: number;
+  stampsTarget: number;
+  totalStampsEarned: number;
+  rewardsAvailable: number;
+  totalRewardsRedeemed: number;
+  lastActivityAt: string;
+}
+
 export interface Cafe {
   id: string;
   name: string;
@@ -15,6 +35,7 @@ export interface Cafe {
   taxName: string; // e.g. 'Sales Tax', 'VAT', 'GST'
   isOpen: boolean;
   pauseReason?: string;
+  loyaltyProgram?: LoyaltyProgramConfig;
   createdAt: string;
 }
 
@@ -68,6 +89,8 @@ export interface Order {
   subtotal: number;
   discount?: number; // in cents
   promoCode?: string;
+  loyaltyDiscount?: number; // in cents (CP-46)
+  loyaltyStampEarned?: boolean; // whether order earned a loyalty stamp (CP-46)
   tip?: number; // in cents (gratuity)
   tax: number;
   taxRate?: number; // Snapshot tax rate percentage at order time

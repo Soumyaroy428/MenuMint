@@ -1303,6 +1303,135 @@ describe('MenuMint API Test Suite', () => {
     assert.ok(exportRes.text.includes('Taxable Net Sales'));
     assert.ok(exportRes.text.includes('TAX COMPLIANCE LIABILITY SUMMARY:'));
   });
+
+  test('CP-46: Customer Loyalty Points & Digital Stamp Card (Accrual, Target Vouchers, Multi-Tenant Isolation, Dashboard Summary)', async () => {
+    const testPhone = '555-444-3322';
+
+    // 1. Check initial public loyalty status without phone
+    const resNoPhone = await request(app).get('/api/cafes/daily-grind/loyalty');
+    assert.strictEqual(resNoPhone.status, 200);
+    assert.strictEqual(resNoPhone.body.success, true);
+    assert.strictEqual(resNoPhone.body.program.enabled, true);
+    assert.strictEqual(resNoPhone.body.program.stampsTarget, 5);
+    assert.strictEqual(resNoPhone.body.account, null);
+
+    // 2. Check initial loyalty balance with customer phone
+    const resWithPhone = await request(app)
+      .get(`/api/cafes/daily-grind/loyalty?phone=${encodeURIComponent(testPhone)}`);
+    assert.strictEqual(resWithPhone.status, 200);
+    assert.strictEqual(resWithPhone.body.account.stampsCount, 0);
+    assert.strictEqual(resWithPhone.body.account.rewardsAvailable, 0);
+
+    // 3. Place 4 orders to earn 4 stamps
+    const cafe1Menu = await request(app).get('/api/cafes/daily-grind/menu');
+    const item1 = cafe1Menu.body.items[0];
+
+    for (let i = 1; i <= 4; i++) {
+      const ordRes = await request(app)
+        .post('/api/orders')
+        .send({
+          cafeSlug: 'daily-grind',
+          customerName: 'Loyal Alice',
+          customerPhone: testPhone,
+          orderType: 'dine-in',
+          tableNumber: `T${i}`,
+          items: [{ menuItemId: item1.id, quantity: 1 }],
+        });
+      assert.strictEqual(ordRes.status, 201);
+      assert.strictEqual(ordRes.body.order.loyaltyStampEarned, true);
+    }
+
+    // Check balance after 4 orders
+    const resAfter4 = await request(app)
+      .get(`/api/cafes/daily-grind/loyalty?phone=${encodeURIComponent(testPhone)}`);
+    assert.strictEqual(resAfter4.body.account.stampsCount, 4);
+    assert.strictEqual(resAfter4.body.account.rewardsAvailable, 0);
+
+    // 4. Place 5th order to hit stampsTarget (5) -> unlocks reward voucher!
+    const ord5Res = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        customerName: 'Loyal Alice',
+        customerPhone: testPhone,
+        orderType: 'dine-in',
+        tableNumber: 'T5',
+        items: [{ menuItemId: item1.id, quantity: 1 }],
+      });
+    assert.strictEqual(ord5Res.status, 201);
+
+    const resAfter5 = await request(app)
+      .get(`/api/cafes/daily-grind/loyalty?phone=${encodeURIComponent(testPhone)}`);
+    assert.strictEqual(resAfter5.body.account.stampsCount, 0); // stamps cycle reset
+    assert.strictEqual(resAfter5.body.account.rewardsAvailable, 1); // 1 reward voucher available!
+    assert.strictEqual(resAfter5.body.account.totalStampsEarned, 5);
+
+    // 5. Multi-Tenant Isolation Check:
+    // Same phone queried at bella-vista should NOT have any stamps or rewards from daily-grind
+    const resCafe2 = await request(app)
+      .get(`/api/cafes/bella-vista/loyalty?phone=${encodeURIComponent(testPhone)}`);
+    assert.strictEqual(resCafe2.status, 200);
+    assert.strictEqual(resCafe2.body.account.stampsCount, 0);
+    assert.strictEqual(resCafe2.body.account.rewardsAvailable, 0);
+
+    // 6. Redeem reward voucher on next order with useLoyaltyReward: true
+    const redeemRes = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        customerName: 'Loyal Alice',
+        customerPhone: testPhone,
+        orderType: 'dine-in',
+        tableNumber: 'T6',
+        items: [{ menuItemId: item1.id, quantity: 2 }], // 2 items so subtotal exceeds discount
+        useLoyaltyReward: true,
+      });
+    assert.strictEqual(redeemRes.status, 201);
+    const redeemedOrder = redeemRes.body.order;
+    assert.strictEqual(redeemedOrder.loyaltyDiscount, 500); // $5.00 discount applied
+    assert.ok(redeemedOrder.discount >= 500);
+
+    // Verify customer's reward voucher was deducted
+    const resAfterRedeem = await request(app)
+      .get(`/api/cafes/daily-grind/loyalty?phone=${encodeURIComponent(testPhone)}`);
+    assert.strictEqual(resAfterRedeem.body.account.rewardsAvailable, 0);
+    assert.strictEqual(resAfterRedeem.body.account.totalRewardsRedeemed, 1);
+    assert.strictEqual(resAfterRedeem.body.account.stampsCount, 1); // earned 1 stamp on this order!
+
+    // 7. Dashboard Loyalty Management & Summary
+    const summaryRes = await request(app)
+      .get('/api/dashboard/loyalty/summary')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    assert.strictEqual(summaryRes.status, 200);
+    assert.strictEqual(summaryRes.body.success, true);
+    assert.ok(summaryRes.body.metrics.totalMembers >= 1);
+    assert.ok(summaryRes.body.metrics.totalStampsIssued >= 6);
+    assert.ok(summaryRes.body.metrics.totalRewardsRedeemed >= 1);
+
+    // 8. Update Loyalty Program Config via Dashboard
+    const patchRes = await request(app)
+      .patch('/api/dashboard/cafe/loyalty')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        stampsTarget: 8,
+        rewardDiscountCents: 600,
+        rewardDescription: '$6.00 Off Any Order',
+      });
+    assert.strictEqual(patchRes.status, 200);
+    assert.strictEqual(patchRes.body.program.stampsTarget, 8);
+    assert.strictEqual(patchRes.body.program.rewardDiscountCents, 600);
+    assert.strictEqual(patchRes.body.program.rewardDescription, '$6.00 Off Any Order');
+
+    // Restore to default 5 stamps / 500 cents
+    await request(app)
+      .patch('/api/dashboard/cafe/loyalty')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        stampsTarget: 5,
+        rewardDiscountCents: 500,
+        rewardDescription: '$5.00 Off Any Order',
+      });
+  });
 });
 
 

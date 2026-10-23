@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Order, MenuItem, MenuCategory, OrderStatus, AnalyticsSummary, PromoCode, Cafe, DietaryTag, OrderFeedback, PrepStation, AccountingReport } from '../types';
+import { User, Order, MenuItem, MenuCategory, OrderStatus, AnalyticsSummary, PromoCode, Cafe, DietaryTag, OrderFeedback, PrepStation, AccountingReport, LoyaltyProgramConfig } from '../types';
 import {
   loginOwner,
   fetchDashboardOrders,
@@ -21,6 +21,8 @@ import {
   updateOrderEta,
   fetchAccountingReport,
   downloadAccountingCSV,
+  fetchDashboardLoyaltySummary,
+  updateDashboardLoyalty,
 } from '../api';
 import {
   Lock,
@@ -81,7 +83,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
   const [loginError, setLoginError] = useState<string | null>(null);
 
   // Dashboard content state
-  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'promos' | 'analytics' | 'accounting'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'promos' | 'analytics' | 'accounting' | 'loyalty'>('orders');
   const [orders, setOrders] = useState<Order[]>([]);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -93,6 +95,22 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
   const [accountingPreset, setAccountingPreset] = useState<'today' | '7days' | 'month' | 'all' | 'custom'>('all');
   const [accountingFrom, setAccountingFrom] = useState<string>('');
   const [accountingTo, setAccountingTo] = useState<string>('');
+  const [loyaltySummary, setLoyaltySummary] = useState<{
+    program: LoyaltyProgramConfig;
+    metrics: {
+      totalMembers: number;
+      totalStampsIssued: number;
+      rewardsAvailable: number;
+      totalRewardsRedeemed: number;
+    };
+  } | null>(null);
+  const [loyaltyLoading, setLoyaltyLoading] = useState(false);
+  const [loyaltySaving, setLoyaltySaving] = useState(false);
+  const [loyaltySuccessMsg, setLoyaltySuccessMsg] = useState<string | null>(null);
+  const [loyaltyEnabled, setLoyaltyEnabled] = useState(true);
+  const [loyaltyTarget, setLoyaltyTarget] = useState(5);
+  const [loyaltyRewardAmount, setLoyaltyRewardAmount] = useState('5.00');
+  const [loyaltyDesc, setLoyaltyDesc] = useState('$5.00 Off Any Order');
   const [loadingData, setLoadingData] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [stationFilter, setStationFilter] = useState<'all' | 'BARISTA' | 'KITCHEN' | 'BAKERY'>('all');
@@ -436,6 +454,46 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
     printWindow.document.close();
     printWindow.focus();
     setTimeout(() => printWindow.print(), 250);
+  };
+
+  // CP-46: Loyalty Program & Digital Stamp Card Handlers
+  const loadLoyaltySummary = async () => {
+    if (!token) return;
+    setLoyaltyLoading(true);
+    try {
+      const summary = await fetchDashboardLoyaltySummary(token);
+      setLoyaltySummary(summary);
+      setLoyaltyEnabled(summary.program.enabled);
+      setLoyaltyTarget(summary.program.stampsTarget);
+      setLoyaltyRewardAmount((summary.program.rewardDiscountCents / 100).toFixed(2));
+      setLoyaltyDesc(summary.program.rewardDescription);
+    } catch (err: any) {
+      alert(err.message || 'Failed to load loyalty summary');
+    } finally {
+      setLoyaltyLoading(false);
+    }
+  };
+
+  const handleSaveLoyalty = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
+    setLoyaltySaving(true);
+    setLoyaltySuccessMsg(null);
+    try {
+      const updated = await updateDashboardLoyalty(token, {
+        enabled: loyaltyEnabled,
+        stampsTarget: Number(loyaltyTarget) || 5,
+        rewardDiscountCents: Math.round(parseFloat(loyaltyRewardAmount || '5.00') * 100),
+        rewardDescription: loyaltyDesc.trim() || '$5.00 Off Any Order',
+      });
+      setLoyaltySummary((prev) => (prev ? { ...prev, program: updated } : null));
+      setLoyaltySuccessMsg('Loyalty program settings updated successfully!');
+      setTimeout(() => setLoyaltySuccessMsg(null), 4000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update loyalty settings');
+    } finally {
+      setLoyaltySaving(false);
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -1104,6 +1162,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
           }}
         >
           <Calculator size={16} /> Accounting & Taxes
+        </button>
+        <button
+          className={`btn btn-sm ${activeTab === 'loyalty' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => {
+            setActiveTab('loyalty');
+            if (!loyaltySummary) {
+              loadLoyaltySummary();
+            }
+          }}
+        >
+          <Award size={16} /> Stamp Card & Loyalty
         </button>
       </div>
 
@@ -1999,7 +2068,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
             </>
           )}
         </div>
-      ) : (
+      ) : activeTab === 'accounting' ? (
         /* CP-45: Accounting & Tax Compliance View */
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {/* Header */}
@@ -2343,7 +2412,258 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
             </>
           ) : null}
         </div>
-      )}
+      ) : activeTab === 'loyalty' ? (
+        /* CP-46: Loyalty Program & Digital Stamp Card View */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {/* Header */}
+          <div
+            style={{
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: 12,
+              padding: '1.25rem',
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '1rem',
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Award size={22} color="#d97706" />
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Customer Loyalty & Stamp Card Engine</h2>
+                <span className={`badge ${loyaltyEnabled ? 'badge-success' : 'badge-warning'}`}>
+                  {loyaltyEnabled ? 'Active' : 'Disabled'}
+                </span>
+              </div>
+              <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: 4 }}>
+                Seamless phone-based loyalty rewards. Customers collect stamps on every order with zero app downloads required.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={loadLoyaltySummary}
+              disabled={loyaltyLoading}
+            >
+              <RefreshCw size={14} className={loyaltyLoading ? 'spin-icon' : ''} />
+              <span>Refresh Metrics</span>
+            </button>
+          </div>
+
+          {loyaltySuccessMsg && (
+            <div style={{ background: '#dcfce7', border: '1px solid #86efac', color: '#166534', padding: '0.75rem 1rem', borderRadius: 8, fontSize: '0.88rem', fontWeight: 600 }}>
+              ✓ {loyaltySuccessMsg}
+            </div>
+          )}
+
+          {/* Metric KPI Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+            <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#64748b', fontSize: '0.82rem', fontWeight: 600, textTransform: 'uppercase' }}>
+                <Users size={16} color="#0284c7" /> Enrolled Members
+              </div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0f172a', marginTop: 4 }}>
+                {loyaltySummary?.metrics.totalMembers || 0}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>Unique customer phone numbers</div>
+            </div>
+
+            <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#64748b', fontSize: '0.82rem', fontWeight: 600, textTransform: 'uppercase' }}>
+                <Award size={16} color="#d97706" /> Total Stamps Issued
+              </div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#d97706', marginTop: 4 }}>
+                {loyaltySummary?.metrics.totalStampsIssued || 0}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>Stamps earned across all orders</div>
+            </div>
+
+            <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#64748b', fontSize: '0.82rem', fontWeight: 600, textTransform: 'uppercase' }}>
+                <Tag size={16} color="#16a34a" /> Rewards Waiting
+              </div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#16a34a', marginTop: 4 }}>
+                {loyaltySummary?.metrics.rewardsAvailable || 0}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>Unlocked vouchers ready to redeem</div>
+            </div>
+
+            <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#64748b', fontSize: '0.82rem', fontWeight: 600, textTransform: 'uppercase' }}>
+                <CheckCircle size={16} color="#059669" /> Vouchers Redeemed
+              </div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#059669', marginTop: 4 }}>
+                {loyaltySummary?.metrics.totalRewardsRedeemed || 0}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>Discounts applied at checkout</div>
+            </div>
+          </div>
+
+          {/* Program Settings & Preview Card */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
+            {/* Form */}
+            <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '1rem', color: '#0f172a' }}>
+                Loyalty Program Settings
+              </h3>
+
+              <form onSubmit={handleSaveLoyalty}>
+                <div className="form-group" style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem', color: '#0f172a' }}>
+                    <input
+                      type="checkbox"
+                      checked={loyaltyEnabled}
+                      onChange={(e) => setLoyaltyEnabled(e.target.checked)}
+                      style={{ width: 18, height: 18 }}
+                    />
+                    Enable Digital Stamp Card Program
+                  </label>
+                  <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '4px 0 0 26px' }}>
+                    When enabled, customers see the stamp card button on your menu and earn 1 stamp per completed order.
+                  </p>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Stamps to Unlock Reward *</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={20}
+                      required
+                      className="form-input"
+                      value={loyaltyTarget}
+                      onChange={(e) => setLoyaltyTarget(Number(e.target.value) || 5)}
+                    />
+                    <span style={{ fontSize: '0.72rem', color: '#64748b' }}>e.g. 5 or 8 stamps</span>
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Discount Amount ({currentUser.currencySymbol}) *</label>
+                    <input
+                      type="number"
+                      step="0.50"
+                      min="1.00"
+                      max="100.00"
+                      required
+                      className="form-input"
+                      value={loyaltyRewardAmount}
+                      onChange={(e) => setLoyaltyRewardAmount(e.target.value)}
+                    />
+                    <span style={{ fontSize: '0.72rem', color: '#64748b' }}>e.g. 5.00</span>
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                  <label className="form-label">Reward Description *</label>
+                  <input
+                    type="text"
+                    required
+                    className="form-input"
+                    value={loyaltyDesc}
+                    onChange={(e) => setLoyaltyDesc(e.target.value)}
+                    placeholder="e.g. $5.00 Off Any Order"
+                  />
+                  <span style={{ fontSize: '0.72rem', color: '#64748b' }}>Displayed on the digital stamp voucher</span>
+                </div>
+
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ width: '100%' }}
+                  disabled={loyaltySaving}
+                >
+                  {loyaltySaving ? 'Saving...' : 'Save Loyalty Settings'}
+                </button>
+              </form>
+            </div>
+
+            {/* Customer Digital Card Live Preview */}
+            <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem' }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '0.75rem' }}>
+                Customer Card Live Preview
+              </div>
+
+              <div
+                style={{
+                  background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                  borderRadius: 14,
+                  padding: '1.25rem',
+                  color: '#ffffff',
+                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.15)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <div>
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Digital Stamp Card
+                    </div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 800 }}>
+                      {currentUser.cafeName}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      background: '#d97706',
+                      borderRadius: '50%',
+                      width: 32,
+                      height: 32,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Award size={18} color="#ffffff" />
+                  </div>
+                </div>
+
+                {/* Stamp Circles */}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(${Math.min(loyaltyTarget || 5, 5)}, 1fr)`,
+                    gap: '0.5rem',
+                    marginBottom: '1rem',
+                  }}
+                >
+                  {Array.from({ length: loyaltyTarget || 5 }).map((_, idx) => {
+                    const isSampleFilled = idx < 2; // preview shows 2 earned stamps
+                    return (
+                      <div
+                        key={idx}
+                        style={{
+                          aspectRatio: '1/1',
+                          borderRadius: '50%',
+                          border: `2px dashed ${isSampleFilled ? '#f59e0b' : '#475569'}`,
+                          background: isSampleFilled ? '#fef3c7' : 'rgba(255, 255, 255, 0.05)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          color: isSampleFilled ? '#92400e' : '#64748b',
+                        }}
+                      >
+                        {isSampleFilled ? '✓' : idx + 1}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div style={{ background: 'rgba(255, 255, 255, 0.08)', borderRadius: 8, padding: '0.65rem 0.85rem' }}>
+                  <div style={{ fontSize: '0.72rem', color: '#cbd5e1' }}>Unlock Reward:</div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#fcd34d' }}>
+                    {loyaltyDesc || `${currentUser.currencySymbol}${loyaltyRewardAmount} Off Any Order`}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* Add / Edit Menu Item Modal */}
       {isItemModalOpen && (

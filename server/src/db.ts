@@ -1,4 +1,4 @@
-import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, OrderFeedback, PrepStation, AccountingReport, TaxBreakdownLine } from './types.js';
+import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, OrderFeedback, PrepStation, AccountingReport, TaxBreakdownLine, LoyaltyProgramConfig, LoyaltyAccount } from './types.js';
 import bcrypt from 'bcryptjs';
 
 // Pre-seeded database in memory with consistent IDs and tenant isolation
@@ -16,6 +16,12 @@ class Database {
       taxRate: 8.25,
       taxName: 'Sales Tax',
       isOpen: true,
+      loyaltyProgram: {
+        enabled: true,
+        stampsTarget: 5,
+        rewardDiscountCents: 500, // $5.00
+        rewardDescription: 'Free Coffee or Pastry (Up to $5.00)',
+      },
       createdAt: new Date().toISOString(),
     },
     {
@@ -30,6 +36,12 @@ class Database {
       taxRate: 10.0,
       taxName: 'VAT',
       isOpen: true,
+      loyaltyProgram: {
+        enabled: true,
+        stampsTarget: 6,
+        rewardDiscountCents: 450, // €4.50
+        rewardDescription: 'Free Italian Espresso or Gelato (Up to €4.50)',
+      },
       createdAt: new Date().toISOString(),
     },
   ];
@@ -348,6 +360,21 @@ class Database {
       comment: 'Authentic Italian espresso with thick crema!',
       customerName: 'Giovanni Rossi',
       createdAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+    },
+  ];
+
+  loyaltyAccounts: LoyaltyAccount[] = [
+    {
+      id: 'loy-1',
+      cafeId: 'cafe-1',
+      customerPhone: '5553217890',
+      customerName: 'Sam VIP',
+      stampsCount: 4,
+      stampsTarget: 5,
+      totalStampsEarned: 9,
+      rewardsAvailable: 1,
+      totalRewardsRedeemed: 1,
+      lastActivityAt: new Date().toISOString(),
     },
   ];
 
@@ -754,6 +781,130 @@ class Database {
       return true;
     }
     return false;
+  }
+
+  // CP-46: Customer Loyalty Program & Digital Stamp Card Methods
+  normalizePhone(phone: string): string {
+    return phone.replace(/\D/g, '');
+  }
+
+  getLoyaltyAccount(cafeId: string, phone: string): LoyaltyAccount | null {
+    const cleanPhone = this.normalizePhone(phone);
+    if (!cleanPhone) return null;
+    return this.loyaltyAccounts.find((a) => a.cafeId === cafeId && a.customerPhone === cleanPhone) || null;
+  }
+
+  getOrCreateLoyaltyAccount(cafeId: string, phone: string, customerName?: string): LoyaltyAccount | null {
+    const cafe = this.getCafeById(cafeId);
+    if (!cafe?.loyaltyProgram?.enabled) return null;
+
+    const cleanPhone = this.normalizePhone(phone);
+    if (!cleanPhone || cleanPhone.length < 7) return null;
+
+    let account = this.loyaltyAccounts.find((a) => a.cafeId === cafeId && a.customerPhone === cleanPhone);
+    if (!account) {
+      const target = cafe.loyaltyProgram.stampsTarget || 5;
+      account = {
+        id: `loy-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        cafeId,
+        customerPhone: cleanPhone,
+        customerName: customerName || 'Valued Guest',
+        stampsCount: 0,
+        stampsTarget: target,
+        totalStampsEarned: 0,
+        rewardsAvailable: 0,
+        totalRewardsRedeemed: 0,
+        lastActivityAt: new Date().toISOString(),
+      };
+      this.loyaltyAccounts.push(account);
+    } else if (customerName && customerName.trim()) {
+      account.customerName = customerName.trim();
+    }
+    return account;
+  }
+
+  recordLoyaltyOrder(
+    cafeId: string,
+    phone: string,
+    customerName?: string,
+    useReward?: boolean
+  ): { stampEarned: boolean; rewardUnlocked: boolean; rewardRedeemed: boolean; discountCents: number; account: LoyaltyAccount | null } {
+    const cafe = this.getCafeById(cafeId);
+    if (!cafe?.loyaltyProgram?.enabled) {
+      return { stampEarned: false, rewardUnlocked: false, rewardRedeemed: false, discountCents: 0, account: null };
+    }
+
+    const account = this.getOrCreateLoyaltyAccount(cafeId, phone, customerName);
+    if (!account) {
+      return { stampEarned: false, rewardUnlocked: false, rewardRedeemed: false, discountCents: 0, account: null };
+    }
+
+    let rewardRedeemed = false;
+    let discountCents = 0;
+
+    // Check if customer is redeeming an existing unlocked reward
+    if (useReward && account.rewardsAvailable > 0) {
+      account.rewardsAvailable -= 1;
+      account.totalRewardsRedeemed += 1;
+      rewardRedeemed = true;
+      discountCents = cafe.loyaltyProgram.rewardDiscountCents || 500;
+    }
+
+    // Customer earns +1 stamp for placing an order
+    account.stampsCount += 1;
+    account.totalStampsEarned += 1;
+    let rewardUnlocked = false;
+
+    // Check if customer reached stampsTarget
+    if (account.stampsCount >= account.stampsTarget) {
+      account.rewardsAvailable += 1;
+      account.stampsCount = 0;
+      rewardUnlocked = true;
+    }
+
+    account.lastActivityAt = new Date().toISOString();
+
+    return {
+      stampEarned: true,
+      rewardUnlocked,
+      rewardRedeemed,
+      discountCents,
+      account,
+    };
+  }
+
+  updateLoyaltyProgram(cafeId: string, updates: Partial<LoyaltyProgramConfig>): Cafe | null {
+    const cafe = this.getCafeById(cafeId);
+    if (!cafe) return null;
+
+    const current = cafe.loyaltyProgram || {
+      enabled: true,
+      stampsTarget: 5,
+      rewardDiscountCents: 500,
+      rewardDescription: 'Free Coffee or Pastry (Up to $5.00)',
+    };
+
+    cafe.loyaltyProgram = {
+      ...current,
+      ...updates,
+    };
+
+    return cafe;
+  }
+
+  getLoyaltySummary(cafeId: string) {
+    const accounts = this.loyaltyAccounts.filter((a) => a.cafeId === cafeId);
+    const totalMembers = accounts.length;
+    const totalStampsIssued = accounts.reduce((sum, a) => sum + a.totalStampsEarned, 0);
+    const rewardsAvailable = accounts.reduce((sum, a) => sum + a.rewardsAvailable, 0);
+    const totalRewardsRedeemed = accounts.reduce((sum, a) => sum + a.totalRewardsRedeemed, 0);
+
+    return {
+      totalMembers,
+      totalStampsIssued,
+      rewardsAvailable,
+      totalRewardsRedeemed,
+    };
   }
 }
 
