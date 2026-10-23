@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { CartItem, OrderType, Order } from '../types';
-import { X, Trash2, Plus, Minus, ShoppingBag, Info, AlertTriangle, ArrowRight, Tag, Heart } from 'lucide-react';
+import { X, Trash2, Plus, Minus, ShoppingBag, Info, AlertTriangle, ArrowRight, Tag, Heart, Users } from 'lucide-react';
 import { submitOrder, validatePromoCode } from '../api';
+import { BillSplitModal } from './BillSplitModal';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -57,6 +58,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   // Tip / Gratuity State
   const [tipType, setTipType] = useState<'none' | '10' | '15' | '20' | 'custom'>('none');
   const [customTipInput, setCustomTipInput] = useState('');
+
+  // Dine-In Bill Split Modal (CP-44)
+  const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
 
   if (!isOpen) return null;
 
@@ -443,6 +447,31 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 <span>Total Due</span>
                 <span>{currencySymbol}{(total / 100).toFixed(2)}</span>
               </div>
+
+              {orderType === 'dine-in' && total > 0 && (
+                <div style={{ marginTop: '0.65rem', textAlign: 'right' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{
+                      fontSize: '0.75rem',
+                      padding: '0.3rem 0.65rem',
+                      color: '#0369a1',
+                      borderColor: '#bae6fd',
+                      background: '#f0f9ff',
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                    onClick={() => setIsSplitModalOpen(true)}
+                    title="Calculate per-guest split shares for this table (CP-44)"
+                  >
+                    <Users size={13} />
+                    <span>Split Table Bill</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Store Paused Banner */}
@@ -493,6 +522,20 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           </form>
         )}
       </div>
+
+      {/* Dine-In Bill Split Modal (CP-44) */}
+      <BillSplitModal
+        isOpen={isSplitModalOpen}
+        onClose={() => setIsSplitModalOpen(false)}
+        currencySymbol={currencySymbol}
+        tableNumber={tableNumber}
+        cafeName={cafeSlug}
+        totalCents={total}
+        subtotalCents={rawSubtotal}
+        taxCents={estimatedTax}
+        tipCents={tipAmount}
+        discountCents={discountAmount}
+      />
     </div>
   );
 };

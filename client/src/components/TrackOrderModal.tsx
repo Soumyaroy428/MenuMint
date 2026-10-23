@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Order } from '../types';
 import { trackOrder, submitOrderFeedback } from '../api';
-import { Search, X, CheckCircle, AlertCircle, RefreshCw, Printer, Clock, Star, Bell, BellRing } from 'lucide-react';
+import { Search, X, CheckCircle, AlertCircle, RefreshCw, Printer, Clock, Star, Bell, BellRing, Users } from 'lucide-react';
+import { BillSplitModal } from './BillSplitModal';
 import {
   playOrderReadyChime,
   flashTabTitle,
@@ -53,6 +54,9 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>(() =>
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'denied'
   );
+
+  // Dine-In Bill Split Modal (CP-44)
+  const [isSplitModalOpen, setIsSplitModalOpen] = useState<boolean>(false);
 
   const handleEnableAlerts = async () => {
     const perm = await requestNotificationPermission();
@@ -578,15 +582,34 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
                   {currencySymbol}{(order.total / 100).toFixed(2)}
                 </strong>
               </div>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={handlePrintReceipt}
-                style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}
-              >
-                <Printer size={14} />
-                <span>Print Receipt</span>
-              </button>
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setIsSplitModalOpen(true)}
+                  style={{
+                    fontSize: '0.8rem',
+                    padding: '0.4rem 0.75rem',
+                    color: '#0369a1',
+                    borderColor: '#bae6fd',
+                    background: '#f0f9ff',
+                    fontWeight: 700,
+                  }}
+                  title="Split bill evenly with table guests (CP-44)"
+                >
+                  <Users size={14} />
+                  <span>Split Bill</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={handlePrintReceipt}
+                  style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}
+                >
+                  <Printer size={14} />
+                  <span>Print Receipt</span>
+                </button>
+              </div>
             </div>
 
             {/* Post-Meal Rating & Feedback (CP-37) */}
@@ -736,6 +759,23 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
           </div>
         )}
       </div>
+
+      {/* Dine-In Bill Split Modal (CP-44) */}
+      {order && (
+        <BillSplitModal
+          isOpen={isSplitModalOpen}
+          onClose={() => setIsSplitModalOpen(false)}
+          currencySymbol={currencySymbol}
+          orderRef={order.orderRef}
+          tableNumber={order.tableNumber}
+          cafeName={order.cafeName}
+          totalCents={order.total}
+          subtotalCents={order.subtotal}
+          taxCents={order.tax}
+          tipCents={order.tip}
+          discountCents={order.discount}
+        />
+      )}
     </div>
   );
 };

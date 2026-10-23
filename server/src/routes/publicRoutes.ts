@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db.js';
 import { OrderItemSnapshot, OrderType } from '../types.js';
+import { calculateBillSplit } from '../billSplitter.js';
 
 export const publicRouter = Router();
 
@@ -366,6 +367,54 @@ publicRouter.get('/orders/:orderRef', (req: Request, res: Response): void => {
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
     },
+  });
+});
+
+// 4b. CP-44: Calculate dine-in bill split breakdown for an order
+publicRouter.get('/orders/:orderRef/split', (req: Request, res: Response): void => {
+  const { orderRef } = req.params;
+  const waysParam = req.query.ways;
+
+  const order = db.getOrderByRef(orderRef);
+  if (!order) {
+    res.status(404).json({
+      error: 'Not Found',
+      message: `Order with reference "${orderRef}" was not found.`,
+    });
+    return;
+  }
+
+  let ways = 2;
+  if (waysParam !== undefined) {
+    const parsed = Number(waysParam);
+    if (!Number.isInteger(parsed) || parsed < 2 || parsed > 20) {
+      res.status(400).json({
+        error: 'Validation Error',
+        message: 'Split count must be an integer between 2 and 20.',
+      });
+      return;
+    }
+    ways = parsed;
+  }
+
+  const cafe = db.getCafeById(order.cafeId);
+
+  const splitResult = calculateBillSplit({
+    totalCents: order.total,
+    subtotalCents: order.subtotal,
+    discountCents: order.discount || 0,
+    taxCents: order.tax || 0,
+    tipCents: order.tip || 0,
+    splitCount: ways,
+    currencySymbol: cafe?.currencySymbol || '$',
+    orderRef: order.orderRef,
+    tableNumber: order.tableNumber,
+    cafeName: cafe?.name,
+  });
+
+  res.json({
+    success: true,
+    split: splitResult,
   });
 });
 

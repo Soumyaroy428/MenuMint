@@ -3,18 +3,18 @@
 **Project:** MenuMint — Multi-tenant Digital Menu & Ordering SaaS for Cafés & Restaurants  
 **Live Production URL:** [https://menu-ordering-saas.vercel.app](https://menu-ordering-saas.vercel.app)  
 **Repository:** `https://github.com/Soumyaroy428/MenuMint.git` (Branch: `main`)  
-**Latest Deployed Commit:** `7e5851d`  
-**Automated Test Suite:** 45 / 45 Tests Passing (100% Pass Rate)  
+**Latest Deployed Commit:** `accc858`  
+**Automated Test Suite:** 46 / 46 Tests Passing (100% Pass Rate)  
 **Generated On:** October 23, 2026  
 
 ---
 
 ## 🌟 Executive Summary
-MenuMint is a lightweight, mobile-first SaaS designed for independent cafés and small food businesses. It empowers customers to browse live digital menus via QR codes, customize dietary preferences, calculate taxes and gratuity, track preparation count-downs in real time, and reorder past favorites with 1 tap. For café owners and kitchen staff, it provides real-time kitchen polling, split prep station routing, audio alerts, and business analytics.
+MenuMint is a lightweight, mobile-first SaaS designed for independent cafés and small food businesses. It empowers customers to browse live digital menus via QR codes, customize dietary preferences, calculate taxes and gratuity, track preparation count-downs in real time, split group bills with penny-exact accuracy, and reorder past favorites with 1 tap. For café owners and kitchen staff, it provides real-time kitchen polling, full-screen KDS bump bar mode, split prep station routing, audio alerts, and business analytics.
 
 ---
 
-## ✅ Completed Checkpoints Registry (CP-00 through CP-43)
+## ✅ Completed Checkpoints Registry (CP-00 through CP-44)
 
 ### 🏗️ Phase 1: Baseline Architecture & MVP Foundation (CP-00 – CP-24)
 *Commit: `fbff90a`, `e38a3ed`, `2e44c28`*
@@ -120,14 +120,21 @@ MenuMint is a lightweight, mobile-first SaaS designed for independent cafés and
   - Station navigation touch tabs (`All Stations`, `☕ Barista`, `🍳 Kitchen Grill`, `🥐 Bakery`) with live badge counts and Prep Queue vs. Ready/Pickup mode toggle.
   - Fullscreen API toggle (`requestFullscreen` / `exitFullscreen`), audio mute/unmute, and live polling indicator.
 
+- **CP-44 (Dine-In Bill Splitting & Shared Table Cart Engine):**
+  - Mathematical penny-exact bill splitting algorithm with zero remainder drift (`calculateBillSplit`).
+  - Public API endpoint (`GET /api/orders/:orderRef/split?ways=N`) validating $2 \le N \le 20$ with tenant awareness.
+  - Interactive `BillSplitModal.tsx` with quick guest pills (2, 3, 4, 5, 6, 8, or +/-), custom guest name labeling, and live payment settlement tracker.
+  - 1-click formatted copy for messaging (WhatsApp / SMS / Slack) and native Web Share API support.
+  - Printable split checks for table guests (`handlePrintSplitReceipt`).
+  - Integrated across the entire customer & staff journey: `TrackOrderModal.tsx`, `CartDrawer.tsx` (pre-order split), and `DashboardPage.tsx` (staff split & check printing).
+
 ---
 
-## 🔮 Upcoming Feature Checkpoints (CP-44 – CP-50)
+## 🔮 Upcoming Feature Checkpoints (CP-45 – CP-50)
 
 | Checkpoint | Status | Description |
 | :--- | :---: | :--- |
-| **CP-44** | *Next Up* | **Dine-In Bill Splitting & Shared Table Cart**<br>Even bill split calculations (2, 3, 4+ guests) with tip and tax allocations. |
-| **CP-45** | *Queued* | **Financial Accounting & Periodic Tax Export**<br>Automated breakdown export for monthly café tax and accounting compliance. |
+| **CP-45** | *Next Up* | **Financial Accounting & Periodic Tax Export**<br>Automated breakdown export for monthly café tax and accounting compliance. |
 | **CP-46** | *Queued* | **Customer Loyalty Points & Digital Stamp Card**<br>Configurable loyalty program rewarding repeat visits. |
 | **CP-47** | *Queued* | **Auto-86 Inventory Depletion Alerts**<br>Automatic item exhaustion triggers based on threshold volume. |
 | **CP-48** | *Queued* | **Multi-Language Menu Localization**<br>Instant language switcher (English, Spanish, French, Italian). |
@@ -137,8 +144,8 @@ MenuMint is a lightweight, mobile-first SaaS designed for independent cafés and
 ---
 
 ## 🧪 Current Verification Metrics
-- **Automated Tests:** 45 / 45 passing (`npm test`)
+- **Automated Tests:** 46 / 46 passing (`npm test`, 100% pass rate)
 - **Frontend Typecheck:** 0 errors (`tsc -p client/tsconfig.json`)
 - **Backend Typecheck:** 0 errors (`tsc -p server/tsconfig.json`)
-- **Vite Production Bundle:** Clean build, gzip optimized (`293 kB`)
+- **Vite Production Bundle:** Clean build, gzip optimized (`321 kB`)
 - **Live Deployment:** Operational at [https://menu-ordering-saas.vercel.app](https://menu-ordering-saas.vercel.app)

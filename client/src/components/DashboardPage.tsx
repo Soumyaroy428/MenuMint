@@ -51,8 +51,10 @@ import {
   Star,
   Percent,
   Monitor,
+  Users,
 } from 'lucide-react';
 import { KitchenDisplaySystem } from './KitchenDisplaySystem';
+import { BillSplitModal } from './BillSplitModal';
 
 interface DashboardPageProps {
   onBackToMenu: () => void;
@@ -91,6 +93,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [newOrderAlert, setNewOrderAlert] = useState<string | null>(null);
   const [isKDSOpen, setIsKDSOpen] = useState(false);
+  const [splitModalOrder, setSplitModalOrder] = useState<Order | null>(null);
   const prevOrderCountRef = useRef<number>(0);
 
   // Item Management Modal State
@@ -1064,6 +1067,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                         <span className={`badge ${badgeColor}`}>{ord.status}</span>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '0.2rem 0.5rem' }}
+                          onClick={() => setSplitModalOrder(ord)}
+                          title="Split Dine-In Bill (CP-44)"
+                        >
+                          <Users size={13} color="#0284c7" />
+                        </button>
                         <button
                           className="btn btn-secondary btn-sm"
                           style={{ padding: '0.2rem 0.5rem' }}
@@ -2300,6 +2311,23 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
           onToggleAutoRefresh={() => setAutoRefresh(!autoRefresh)}
           soundEnabled={soundEnabled}
           onToggleSound={() => setSoundEnabled(!soundEnabled)}
+        />
+      )}
+
+      {/* Dine-In Bill Split Modal (CP-44) */}
+      {splitModalOrder && currentUser && (
+        <BillSplitModal
+          isOpen={!!splitModalOrder}
+          onClose={() => setSplitModalOrder(null)}
+          currencySymbol={currentUser.currencySymbol || '$'}
+          orderRef={splitModalOrder.orderRef}
+          tableNumber={splitModalOrder.tableNumber}
+          cafeName={currentUser.cafeName}
+          totalCents={splitModalOrder.total}
+          subtotalCents={splitModalOrder.subtotal}
+          taxCents={splitModalOrder.tax}
+          tipCents={splitModalOrder.tip}
+          discountCents={splitModalOrder.discount}
         />
       )}
 

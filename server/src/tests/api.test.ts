@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import request from 'supertest';
 import { app } from '../app.js';
 import { db } from '../db.js';
+import { calculateBillSplit } from '../billSplitter.js';
 
 describe('MenuMint API Test Suite', () => {
   let ownerToken: string;
@@ -1158,6 +1159,83 @@ describe('MenuMint API Test Suite', () => {
     assert.strictEqual(trackRes.body.order.status, 'READY');
     assert.strictEqual(trackRes.body.order.cafeName, 'The Daily Grind Café');
     assert.ok(trackRes.body.order.estimatedReadyAt);
+  });
+
+  // 46. CP-44: Dine-In Bill Splitting & Shared Table Cart
+  test('CP-44: GET /api/orders/:orderRef/split should calculate mathematically exact bill splits and validate ways', async () => {
+    // Create an order for Table 4 with known total
+    const createRes = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        orderType: 'dine-in',
+        tableNumber: 'Table 4',
+        customerName: 'Sam & Friends',
+        items: [
+          { menuItemId: 'item-1', quantity: 2 }, // 2x $4.50 = $9.00
+          { menuItemId: 'item-3', quantity: 1 }, // 1x $6.50 = $6.50
+        ],
+        tip: 200, // $2.00 tip
+      });
+
+    assert.strictEqual(createRes.status, 201);
+    const order = createRes.body.order;
+
+    // 1. Split 3 ways
+    const split3Res = await request(app).get(`/api/orders/${order.orderRef}/split?ways=3`);
+    assert.strictEqual(split3Res.status, 200);
+    assert.strictEqual(split3Res.body.success, true);
+    const split3 = split3Res.body.split;
+
+    assert.strictEqual(split3.splitCount, 3);
+    assert.strictEqual(split3.totalCents, order.total);
+    assert.strictEqual(split3.guestShares.length, 3);
+
+    // Verify zero discrepancy: sum of all guest shares must equal exact total
+    const sumShares = split3.guestShares.reduce((acc: number, g: any) => acc + g.amountCents, 0);
+    assert.strictEqual(sumShares, order.total);
+
+    // Verify Guest 1 is primary payer and handles remainder cents
+    assert.strictEqual(split3.guestShares[0].isPrimaryPayer, true);
+    assert.strictEqual(
+      split3.guestShares[0].amountCents,
+      split3.perPersonTotalCents + split3.remainderCents
+    );
+    assert.ok(split3.shareableSummary.includes('Table 4'));
+    assert.ok(split3.shareableSummary.includes(order.orderRef));
+
+    // 2. Default split (2 ways when ways param omitted)
+    const splitDefRes = await request(app).get(`/api/orders/${order.orderRef}/split`);
+    assert.strictEqual(splitDefRes.status, 200);
+    assert.strictEqual(splitDefRes.body.split.splitCount, 2);
+
+    // 3. Reject invalid split count (< 2 or > 20)
+    const invalidWays1 = await request(app).get(`/api/orders/${order.orderRef}/split?ways=1`);
+    assert.strictEqual(invalidWays1.status, 400);
+
+    const invalidWays2 = await request(app).get(`/api/orders/${order.orderRef}/split?ways=25`);
+    assert.strictEqual(invalidWays2.status, 400);
+
+    const invalidWaysStr = await request(app).get(`/api/orders/${order.orderRef}/split?ways=abc`);
+    assert.strictEqual(invalidWaysStr.status, 400);
+
+    // 4. Reject unknown order
+    const unknownRes = await request(app).get('/api/orders/NONEXISTENT-REF/split');
+    assert.strictEqual(unknownRes.status, 404);
+
+    // 5. Test pure calculation unit with odd remainder (1000 cents split 3 ways)
+    const oddSplit = calculateBillSplit({
+      totalCents: 1000,
+      subtotalCents: 900,
+      taxCents: 100,
+      splitCount: 3,
+      currencySymbol: '$',
+    });
+    assert.strictEqual(oddSplit.remainderCents, 1);
+    assert.strictEqual(oddSplit.guestShares[0].amountCents, 334);
+    assert.strictEqual(oddSplit.guestShares[1].amountCents, 333);
+    assert.strictEqual(oddSplit.guestShares[2].amountCents, 333);
+    assert.strictEqual(334 + 333 + 333, 1000);
   });
 });
 

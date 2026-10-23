@@ -1,4 +1,5 @@
 import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, DietaryTag, OrderFeedback, PrepStation } from './types';
+import { BillSplitResult } from './utils/billSplitter';
 
 const API_BASE = '/api';
 
@@ -405,6 +406,15 @@ export async function updateDashboardCafeSettings(
     throw new Error(data.message || 'Failed to update store settings');
   }
   return data.cafe;
+}
+
+export async function fetchBillSplit(orderRef: string, ways: number = 2): Promise<BillSplitResult> {
+  const res = await fetch(`${API_BASE}/orders/${orderRef}/split?ways=${ways}`);
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to calculate bill split');
+  }
+  return data.split;
 }
 
 
