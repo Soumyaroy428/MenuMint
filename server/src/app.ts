@@ -14,7 +14,14 @@ export const app = express();
 
 // Security and utility middlewares
 app.use(cors());
-app.use(express.json({ limit: '100kb' }));
+app.use(
+  express.json({
+    limit: '100kb',
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 
 // Health check endpoint
 app.get('/api/health', (_req: Request, res: Response) => {

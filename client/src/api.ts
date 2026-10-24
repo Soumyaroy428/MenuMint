@@ -1,4 +1,4 @@
-import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, DietaryTag, OrderFeedback, PrepStation, AccountingReport, LoyaltyProgramConfig, InventorySummary, AdvanceOrderingConfig, PickupSlot, FulfillmentType } from './types';
+import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, DietaryTag, OrderFeedback, PrepStation, AccountingReport, LoyaltyProgramConfig, InventorySummary, AdvanceOrderingConfig, PickupSlot, FulfillmentType, PaymentStatus, PaymentMethod } from './types';
 import { BillSplitResult } from './utils/billSplitter';
 
 const API_BASE = '/api';
@@ -35,6 +35,7 @@ export async function submitOrder(orderData: {
   fulfillmentType?: FulfillmentType;
   scheduledPickupTime?: string;
   pickupWindow?: string;
+  paymentMethod?: PaymentMethod;
   items: { menuItemId: string; quantity: number }[];
 }): Promise<{
   success: boolean;
@@ -625,6 +626,27 @@ export async function updateAdvanceOrderingConfig(
     throw new Error(data.message || 'Failed to update advance ordering configuration');
   }
   return data.config;
+}
+
+export async function updateOrderPayment(
+  token: string,
+  orderId: string,
+  paymentStatus: PaymentStatus,
+  paymentMethod?: PaymentMethod
+): Promise<{ success: boolean; order: Order; message: string }> {
+  const res = await fetch(`${API_BASE}/dashboard/orders/${orderId}/payment`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ paymentStatus, paymentMethod }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || data.error || 'Failed to update payment');
+  }
+  return data;
 }
 
 

@@ -4,6 +4,31 @@ export type OrderType = 'dine-in' | 'takeaway';
 
 export type FulfillmentType = 'ASAP' | 'SCHEDULED';
 
+export type PaymentStatus = 'UNPAID' | 'PENDING' | 'PAID' | 'FAILED' | 'CANCELLED' | 'REFUNDED';
+
+export type PaymentMethod = 'YOUPI_ONLINE' | 'UPI' | 'CARD' | 'CASH';
+
+export interface YoupiMerchantConfig {
+  enabled: boolean;
+  provider: 'YOUPI_PG';
+  merchantId: string;
+  webhookSecret: string;
+  upiId?: string;
+  payeeName?: string;
+  apiUrl?: string;
+  checkoutUrl?: string;
+}
+
+export interface PaymentSession {
+  paymentId: string;
+  orderId: string;
+  amount: string; // e.g. "12.50"
+  currency: string;
+  status: 'ACTIVE' | 'PENDING';
+  checkoutUrl: string;
+  qrPayload?: string; // UPI intent string
+}
+
 export interface AdvanceOrderingConfig {
   enabled: boolean;
   leadTimeMinutes: number; // minimum lead time buffer in minutes, e.g. 20
@@ -56,6 +81,7 @@ export interface Cafe {
   pauseReason?: string;
   loyaltyProgram?: LoyaltyProgramConfig;
   advanceOrdering?: AdvanceOrderingConfig;
+  paymentConfig?: YoupiMerchantConfig;
 }
 
 export type SupportedLanguage = 'en' | 'es' | 'fr' | 'it';
@@ -136,6 +162,12 @@ export interface Order {
   taxRate?: number;
   taxName?: string;
   total: number;
+  paymentStatus?: PaymentStatus;
+  paymentMethod?: PaymentMethod;
+  paymentId?: string;
+  paidAt?: string;
+  checkoutUrl?: string;
+  qrPayload?: string;
   fulfillmentType?: FulfillmentType; // CP-49: 'ASAP' | 'SCHEDULED'
   scheduledPickupTime?: string;     // CP-49: ISO timestamp for advance pickup
   pickupWindow?: string;            // CP-49: formatted window, e.g. "2:30 PM - 2:45 PM"
@@ -265,6 +297,8 @@ export interface AccountingReport {
     tip: number;
     total: number;
     status: OrderStatus;
+    paymentStatus?: PaymentStatus;
+    paymentMethod?: PaymentMethod;
   }[];
 }
 

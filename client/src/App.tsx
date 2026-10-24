@@ -6,6 +6,7 @@ import { MenuPage } from './components/MenuPage';
 import { CartDrawer } from './components/CartDrawer';
 import { OrderConfirmationModal } from './components/OrderConfirmationModal';
 import { TrackOrderModal } from './components/TrackOrderModal';
+import { YoupiPaymentModal } from './components/YoupiPaymentModal';
 import { QRCodeModal } from './components/QRCodeModal';
 import { DashboardPage } from './components/DashboardPage';
 import { OrderHistoryModal } from './components/OrderHistoryModal';
@@ -54,6 +55,7 @@ export function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
+  const [youpiOrder, setYoupiOrder] = useState<Order | null>(null);
   const [isTrackModalOpen, setIsTrackModalOpen] = useState(false);
   const [trackingOrderRef, setTrackingOrderRef] = useState<string>('');
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
@@ -425,9 +427,36 @@ export function App() {
         currentLanguage={currentLanguage}
         onOrderSuccess={(order) => {
           saveOrderToHistory(order, cafeSlug, cafe?.name || 'MenuMint Café');
-          setConfirmedOrder(order);
           setHistoryCount(getCustomerOrderHistory(cafeSlug).length);
           loadMenu();
+          if (order.paymentMethod === 'YOUPI_ONLINE' && order.paymentStatus !== 'PAID') {
+            setYoupiOrder(order);
+          } else {
+            setConfirmedOrder(order);
+          }
+        }}
+      />
+
+      {/* YouPI-PG Gateway Payment Modal (CP-51) */}
+      <YoupiPaymentModal
+        isOpen={Boolean(youpiOrder)}
+        order={youpiOrder}
+        currencySymbol={cafe?.currencySymbol || '$'}
+        onClose={() => {
+          if (youpiOrder) {
+            setConfirmedOrder(youpiOrder);
+            setYoupiOrder(null);
+          }
+        }}
+        onPaymentSuccess={(paidOrder) => {
+          saveOrderToHistory(paidOrder, cafeSlug, cafe?.name || 'MenuMint Café');
+          setYoupiOrder(null);
+          setConfirmedOrder(paidOrder);
+        }}
+        onSwitchToCash={(cashOrder) => {
+          saveOrderToHistory(cashOrder, cafeSlug, cafe?.name || 'MenuMint Café');
+          setYoupiOrder(null);
+          setConfirmedOrder(cashOrder);
         }}
       />
 

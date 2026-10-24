@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { db } from '../db.js';
 import { authenticateOwner, AuthenticatedRequest } from '../auth.js';
-import { OrderStatus, PrepStation } from '../types.js';
+import { OrderStatus, PrepStation, PaymentStatus, PaymentMethod } from '../types.js';
 
 export const dashboardRouter = Router();
 
@@ -168,6 +168,60 @@ dashboardRouter.patch('/orders/:id/eta', (req: AuthenticatedRequest, res: Respon
   res.json({
     success: true,
     message: `Order ETA updated to ${finalPrepMinutes} minutes.`,
+    order: updated,
+  });
+});
+
+// 2c. Update order payment status (Staff counter settlement / Mark as paid)
+dashboardRouter.patch('/orders/:id/payment', (req: AuthenticatedRequest, res: Response): void => {
+  const { id } = req.params;
+  const { paymentStatus, paymentMethod } = req.body;
+  const cafeId = req.user!.cafeId;
+
+  const order = db.getOrderById(id);
+  if (!order) {
+    res.status(404).json({
+      error: 'Not Found',
+      message: `Order with ID "${id}" was not found.`,
+    });
+    return;
+  }
+
+  // Tenant Isolation Guard
+  if (order.cafeId !== cafeId) {
+    res.status(403).json({
+      error: 'Forbidden',
+      message: 'Access denied. You do not have permission to manage this order.',
+    });
+    return;
+  }
+
+  const validStatuses: PaymentStatus[] = ['PENDING', 'PAID', 'FAILED', 'REFUNDED'];
+  if (paymentStatus && !validStatuses.includes(paymentStatus)) {
+    res.status(400).json({
+      error: 'Validation Error',
+      message: `Invalid payment status. Allowed values: [${validStatuses.join(', ')}]`,
+    });
+    return;
+  }
+
+  const targetStatus: PaymentStatus = paymentStatus || 'PAID';
+  const updates: { paymentStatus: PaymentStatus; paymentMethod?: PaymentMethod; paidAt?: string } = {
+    paymentStatus: targetStatus,
+  };
+
+  if (targetStatus === 'PAID') {
+    updates.paidAt = new Date().toISOString();
+  }
+  if (paymentMethod) {
+    updates.paymentMethod = paymentMethod;
+  }
+
+  const updated = db.updateOrderPayment(order.id, updates);
+
+  res.json({
+    success: true,
+    message: `Payment status updated to ${targetStatus}.`,
     order: updated,
   });
 });
@@ -678,6 +732,8 @@ dashboardRouter.get('/accounting/export', (req: AuthenticatedRequest, res: Respo
     'Gratuity / Tip',
     'Total Paid',
     'Status',
+    'Payment Status',
+    'Payment Method',
   ];
 
   const rows = report.orders.map((o) => [
@@ -695,6 +751,8 @@ dashboardRouter.get('/accounting/export', (req: AuthenticatedRequest, res: Respo
     (o.tip / 100).toFixed(2),
     (o.total / 100).toFixed(2),
     o.status,
+    o.paymentStatus || 'PENDING',
+    o.paymentMethod || 'CASH',
   ]);
 
   const totalRow = [
@@ -711,6 +769,8 @@ dashboardRouter.get('/accounting/export', (req: AuthenticatedRequest, res: Respo
     (report.totalTaxCollected / 100).toFixed(2),
     (report.totalTipsCollected / 100).toFixed(2),
     (report.totalRevenue / 100).toFixed(2),
+    '""',
+    '""',
     '""',
   ];
 

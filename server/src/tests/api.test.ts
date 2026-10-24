@@ -1,5 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
+import crypto from 'node:crypto';
 import request from 'supertest';
 import { app } from '../app.js';
 import { db } from '../db.js';
@@ -1921,6 +1922,127 @@ describe('MenuMint API Test Suite', () => {
     assert.strictEqual(cafe2Acct.status, 200);
     assert.strictEqual(cafe2Acct.body.report.currency, 'EUR');
     assert.strictEqual(cafe2Acct.body.report.currencySymbol, '€');
+  });
+
+  test('CP-51: YouPI-PG V2 Payment Gateway Integration & Reconcile (Online Session, HMAC-SHA256 Webhook, Status Polling & Counter Settlement)', async () => {
+    // 1. Submit order choosing YouPI Online Payment
+    const onlineOrderRes = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        customerName: 'Youpi Buyer',
+        customerPhone: '555-777-8888',
+        orderType: 'takeaway',
+        paymentMethod: 'YOUPI_ONLINE',
+        items: [{ menuItemId: 'item-1', quantity: 2 }],
+      });
+
+    assert.strictEqual(onlineOrderRes.status, 201);
+    const orderData = onlineOrderRes.body.order;
+    assert.strictEqual(orderData.paymentMethod, 'YOUPI_ONLINE');
+    assert.strictEqual(orderData.paymentStatus, 'PENDING');
+    assert.ok(orderData.paymentId && orderData.paymentId.startsWith('youpi_'));
+    assert.ok(orderData.checkoutUrl && orderData.checkoutUrl.includes('checkout'));
+    assert.ok(orderData.qrPayload && orderData.qrPayload.startsWith('upi://pay?pa=dailygrind%40upi'));
+
+    // 2. Poll payment status endpoint
+    const pollRes = await request(app).get(`/api/orders/${orderData.orderRef}/payment-status`);
+    assert.strictEqual(pollRes.status, 200);
+    assert.strictEqual(pollRes.body.orderRef, orderData.orderRef);
+    assert.strictEqual(pollRes.body.paymentStatus, 'PENDING');
+    assert.strictEqual(pollRes.body.paymentMethod, 'YOUPI_ONLINE');
+    assert.strictEqual(pollRes.body.paymentId, orderData.paymentId);
+
+    // 3. HMAC-SHA256 Signed Webhook Reconcile
+    const cafe1 = db.getCafeBySlug('daily-grind');
+    const webhookSecret = cafe1?.paymentConfig?.webhookSecret || 'youpi_sec_dg_live_8f3a9b';
+    const webhookPayload = {
+      event: 'payment.success',
+      orderId: orderData.orderRef,
+      paymentId: orderData.paymentId,
+      amount: (orderData.total / 100).toFixed(2),
+      currency: 'USD',
+      status: 'SUCCESS',
+      timestamp: new Date().toISOString(),
+    };
+    const rawPayload = JSON.stringify(webhookPayload);
+
+    // Invalid signature must be rejected with 401 Unauthorized
+    const forgedSigRes = await request(app)
+      .post('/api/payment/webhook')
+      .set('Content-Type', 'application/json')
+      .set('x-gateway-signature', 'forged_fake_signature_abc123')
+      .send(rawPayload);
+    assert.strictEqual(forgedSigRes.status, 401);
+
+    // Valid HMAC-SHA256 signature must be verified and processed
+    const validSignature = crypto.createHmac('sha256', webhookSecret).update(rawPayload).digest('hex');
+    const validSigRes = await request(app)
+      .post('/api/payment/webhook')
+      .set('Content-Type', 'application/json')
+      .set('x-gateway-signature', validSignature)
+      .send(rawPayload);
+    assert.strictEqual(validSigRes.status, 200);
+    assert.strictEqual(validSigRes.body.received, true);
+    assert.strictEqual(validSigRes.body.status, 'PAID');
+
+    // Verify order payment status is now PAID
+    const verifiedOrderRes = await request(app).get(`/api/orders/${orderData.orderRef}`);
+    assert.strictEqual(verifiedOrderRes.status, 200);
+    assert.strictEqual(verifiedOrderRes.body.order.paymentStatus, 'PAID');
+    assert.ok(verifiedOrderRes.body.order.paidAt);
+
+    // 4. Counter Cash Order & Staff Settlement
+    const cashOrderRes = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        customerName: 'Cash Charlie',
+        orderType: 'dine-in',
+        tableNumber: 'Table 9',
+        paymentMethod: 'CASH',
+        items: [{ menuItemId: 'item-2', quantity: 1 }],
+      });
+    assert.strictEqual(cashOrderRes.status, 201);
+    const cashOrder = cashOrderRes.body.order;
+    assert.strictEqual(cashOrder.paymentMethod, 'CASH');
+    assert.strictEqual(cashOrder.paymentStatus, 'PENDING');
+
+    // Login owners
+    const login1 = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'owner@dailygrind.com', password: 'password123' });
+    const token1 = login1.body.token;
+
+    const login2 = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'owner@bellavista.com', password: 'password123' });
+    const token2 = login2.body.token;
+
+    // Cross-tenant settlement must return 403 Forbidden
+    const crossSettleRes = await request(app)
+      .patch(`/api/dashboard/orders/${cashOrder.id}/payment`)
+      .set('Authorization', `Bearer ${token2}`)
+      .send({ paymentStatus: 'PAID' });
+    assert.strictEqual(crossSettleRes.status, 403);
+
+    // Authorized staff settlement
+    const authSettleRes = await request(app)
+      .patch(`/api/dashboard/orders/${cashOrder.id}/payment`)
+      .set('Authorization', `Bearer ${token1}`)
+      .send({ paymentStatus: 'PAID' });
+    assert.strictEqual(authSettleRes.status, 200);
+    assert.strictEqual(authSettleRes.body.order.paymentStatus, 'PAID');
+    assert.ok(authSettleRes.body.order.paidAt);
+
+    // 5. Accounting CSV Export contains Payment columns
+    const acctCsvRes = await request(app)
+      .get('/api/dashboard/accounting/export?preset=all')
+      .set('Authorization', `Bearer ${token1}`);
+    assert.strictEqual(acctCsvRes.status, 200);
+    assert.ok(acctCsvRes.text.includes('Payment Status'));
+    assert.ok(acctCsvRes.text.includes('Payment Method'));
+    assert.ok(acctCsvRes.text.includes(orderData.orderRef));
   });
 });
 

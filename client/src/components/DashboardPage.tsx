@@ -24,6 +24,7 @@ import {
   fetchDashboardLoyaltySummary,
   updateDashboardLoyalty,
   updateItemStock,
+  updateOrderPayment,
 } from '../api';
 import {
   Lock,
@@ -541,6 +542,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
     }
   };
 
+  const handleMarkOrderPaid = async (orderId: string) => {
+    if (!token) return;
+    setActionError(null);
+    try {
+      const res = await updateOrderPayment(token, orderId, 'PAID', 'CASH');
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? res.order : o)));
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to update payment status');
+    }
+  };
+
   const handleAdjustEta = async (orderId: string, deltaMinutes: number) => {
     if (!token) return;
     setActionError(null);
@@ -804,6 +816,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
             <span>TOTAL:</span>
             <span>${currentUser?.currencySymbol || '$'}${(ord.total / 100).toFixed(2)}</span>
           </div>
+          <div class="item-row bold" style="font-size: 12px; color: ${ord.paymentStatus === 'PAID' ? 'green' : '#b45309'}; margin-top: 4px;">
+            <span>PAYMENT:</span>
+            <span>${ord.paymentStatus === 'PAID' ? 'PAID (ONLINE/CARD)' : 'DUE AT COUNTER (CASH)'}</span>
+          </div>
           <div class="center" style="margin-top: 16px; font-size: 11px">
             *** KITCHEN COPY ***
           </div>
@@ -868,7 +884,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
 
           <div style={{ borderTop: '1px solid #f1f5f9', marginTop: '1.25rem', paddingTop: '1rem', textAlign: 'center' }}>
             <p style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.4rem' }}>
-              Quick Demo Accounts:
+              Default Store Credentials:
             </p>
             <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center', marginBottom: '0.75rem' }}>
               <button
@@ -1564,11 +1580,35 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
                       </div>
                     ) : null}
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9', paddingTop: '0.5rem', fontWeight: 800, fontSize: '0.95rem', marginBottom: '0.75rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9', paddingTop: '0.5rem', fontWeight: 800, fontSize: '0.95rem', marginBottom: '0.4rem' }}>
                       <span>Total Due</span>
                       <span style={{ color: '#059669' }}>
                         {currentUser.currencySymbol}{(ord.total / 100).toFixed(2)}
                       </span>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', fontSize: '0.82rem' }}>
+                      <span style={{ color: '#64748b' }}>Payment:</span>
+                      {ord.paymentStatus === 'PAID' ? (
+                        <span className="badge badge-success" style={{ fontWeight: 700, fontSize: '0.72rem' }}>
+                          ⚡ PAID ({ord.paymentMethod === 'YOUPI_ONLINE' ? 'ONLINE UPI' : 'CASH'})
+                        </span>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span className="badge badge-warning" style={{ fontWeight: 700, fontSize: '0.72rem' }}>
+                            💵 DUE AT COUNTER
+                          </span>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '0.15rem 0.5rem', fontSize: '0.7rem', color: '#059669', borderColor: '#a7f3d0', background: '#ecfdf5' }}
+                            onClick={() => handleMarkOrderPaid(ord.id)}
+                            title="Mark order as settled at counter"
+                          >
+                            Mark Paid
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Action buttons based on state machine */}

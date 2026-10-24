@@ -1,6 +1,6 @@
 import React from 'react';
 import { Order } from '../types';
-import { CheckCircle2, Clock, MapPin, Receipt, X, Activity } from 'lucide-react';
+import { CheckCircle2, Clock, MapPin, Receipt, X, Activity, CreditCard } from 'lucide-react';
 
 interface OrderConfirmationModalProps {
   order: Order | null;
@@ -81,9 +81,24 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
             </div>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.85rem' }}>
             <span style={{ color: '#64748b' }}>Customer:</span>
             <span style={{ fontWeight: 600 }}>{order.customerName}</span>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+            <span style={{ color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <CreditCard size={14} /> Payment:
+            </span>
+            {order.paymentStatus === 'PAID' ? (
+              <span className="badge badge-success" style={{ fontWeight: 700 }}>
+                ⚡ PAID (Online UPI / Card)
+              </span>
+            ) : (
+              <span className="badge badge-neutral" style={{ fontWeight: 700 }}>
+                💵 PAY AT COUNTER ({order.paymentMethod || 'CASH'})
+              </span>
+            )}
           </div>
         </div>
 

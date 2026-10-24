@@ -4,6 +4,31 @@ export type OrderType = 'dine-in' | 'takeaway';
 
 export type FulfillmentType = 'ASAP' | 'SCHEDULED';
 
+export type PaymentStatus = 'UNPAID' | 'PENDING' | 'PAID' | 'FAILED' | 'CANCELLED' | 'REFUNDED';
+
+export type PaymentMethod = 'YOUPI_ONLINE' | 'UPI' | 'CARD' | 'CASH';
+
+export interface YoupiMerchantConfig {
+  enabled: boolean;
+  provider: 'YOUPI_PG';
+  merchantId: string;
+  webhookSecret: string;
+  upiId?: string;
+  payeeName?: string;
+  apiUrl?: string;
+  checkoutUrl?: string;
+}
+
+export interface PaymentSession {
+  paymentId: string;
+  orderId: string;
+  amount: string; // formatted in major units e.g. "15.00"
+  currency: string;
+  status: 'ACTIVE' | 'PENDING';
+  checkoutUrl: string;
+  qrPayload?: string; // UPI intent string: upi://pay?pa=...
+}
+
 export interface AdvanceOrderingConfig {
   enabled: boolean;
   leadTimeMinutes: number; // minimum lead time buffer in minutes, e.g. 20
@@ -56,6 +81,7 @@ export interface Cafe {
   pauseReason?: string;
   loyaltyProgram?: LoyaltyProgramConfig;
   advanceOrdering?: AdvanceOrderingConfig; // CP-49: Scheduled advance ordering policy
+  paymentConfig?: YoupiMerchantConfig; // YouPI-PG V2 payment gateway configuration
   createdAt: string;
 }
 
@@ -131,6 +157,12 @@ export interface Order {
   taxRate?: number; // Snapshot tax rate percentage at order time
   taxName?: string; // Snapshot tax label at order time
   total: number;
+  paymentStatus?: PaymentStatus;    // YouPI-PG: 'UNPAID' | 'PENDING' | 'PAID' | 'FAILED'
+  paymentMethod?: PaymentMethod;    // YouPI-PG: 'YOUPI_ONLINE' | 'UPI' | 'CARD' | 'CASH'
+  paymentId?: string;               // Gateway transaction reference
+  paidAt?: string;                  // ISO timestamp of payment confirmation
+  checkoutUrl?: string;             // Hosted YouPI checkout portal URL
+  qrPayload?: string;               // UPI Intent string for QR code generation
   fulfillmentType?: FulfillmentType; // CP-49: 'ASAP' | 'SCHEDULED'
   scheduledPickupTime?: string;     // CP-49: ISO timestamp for advance pickup
   pickupWindow?: string;            // CP-49: formatted window, e.g. "2:30 PM - 2:45 PM"
@@ -237,6 +269,8 @@ export interface AccountingReport {
     tip: number;
     total: number;
     status: OrderStatus;
+    paymentStatus?: PaymentStatus;
+    paymentMethod?: PaymentMethod;
   }[];
 }
 

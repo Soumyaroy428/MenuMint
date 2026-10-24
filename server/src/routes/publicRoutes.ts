@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db.js';
-import { OrderItemSnapshot, OrderType } from '../types.js';
+import { OrderItemSnapshot, OrderType, PaymentMethod, PaymentStatus } from '../types.js';
 import { calculateBillSplit } from '../billSplitter.js';
+import { youpiPaymentService } from '../services/paymentService.js';
 
 export const publicRouter = Router();
 
@@ -138,7 +139,7 @@ publicRouter.get('/cafes/:slug/pickup-slots', (req: Request, res: Response): voi
 });
 
 // 3. Submit an order (Server-authoritative calculation and validation)
-publicRouter.post('/orders', (req: Request, res: Response): void => {
+publicRouter.post('/orders', async (req: Request, res: Response): Promise<void> => {
   const {
     cafeSlug,
     cafeId,
@@ -154,6 +155,7 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
     fulfillmentType,
     scheduledPickupTime,
     pickupWindow,
+    paymentMethod,
   } = req.body;
 
   // Resolve café
@@ -437,7 +439,10 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
     return;
   }
 
-  // Persist order with snapshot taxRate & taxName, prep ETA, and loyalty properties (CP-40 & CP-46)
+  const chosenPaymentMethod: PaymentMethod =
+    paymentMethod === 'YOUPI_ONLINE' ? 'YOUPI_ONLINE' : 'CASH';
+
+  // Persist order with snapshot taxRate & taxName, prep ETA, loyalty, and payment status
   const newOrder = db.createOrder({
     cafeId: cafe.id,
     status: 'PENDING',
@@ -462,7 +467,26 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
     fulfillmentType: isScheduled ? 'SCHEDULED' : 'ASAP',
     scheduledPickupTime: isScheduled ? scheduledPickupTime : undefined,
     pickupWindow: isScheduled ? (pickupWindow || undefined) : undefined,
+    paymentStatus: 'PENDING',
+    paymentMethod: chosenPaymentMethod,
   });
+
+  // If YouPI online payment chosen, generate active gateway session & QR payload
+  if (chosenPaymentMethod === 'YOUPI_ONLINE') {
+    try {
+      const session = await youpiPaymentService.createPaymentSession(newOrder, cafe);
+      db.updateOrderPayment(newOrder.id, {
+        paymentId: session.paymentId,
+        checkoutUrl: session.checkoutUrl,
+        qrPayload: session.qrPayload,
+      });
+      newOrder.paymentId = session.paymentId;
+      newOrder.checkoutUrl = session.checkoutUrl;
+      newOrder.qrPayload = session.qrPayload;
+    } catch {
+      // Session creation fallback already handled internally
+    }
+  }
 
   res.status(201).json({
     success: true,
@@ -493,6 +517,11 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
       pickupWindow: newOrder.pickupWindow,
       currency: cafe.currency,
       currencySymbol: cafe.currencySymbol,
+      paymentStatus: newOrder.paymentStatus || 'PENDING',
+      paymentMethod: newOrder.paymentMethod || chosenPaymentMethod,
+      paymentId: newOrder.paymentId,
+      checkoutUrl: newOrder.checkoutUrl,
+      qrPayload: newOrder.qrPayload,
       createdAt: newOrder.createdAt,
     },
     loyalty: loyaltyResult
@@ -550,10 +579,132 @@ publicRouter.get('/orders/:orderRef', (req: Request, res: Response): void => {
       fulfillmentType: order.fulfillmentType,
       scheduledPickupTime: order.scheduledPickupTime,
       pickupWindow: order.pickupWindow,
+      paymentStatus: order.paymentStatus || 'PENDING',
+      paymentMethod: order.paymentMethod || 'CASH',
+      paymentId: order.paymentId,
+      paidAt: order.paidAt,
+      checkoutUrl: order.checkoutUrl,
+      qrPayload: order.qrPayload,
       feedback: order.feedback,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
     },
+  });
+});
+
+// 4a. Get payment status for live checkout polling
+publicRouter.get('/orders/:orderRef/payment-status', (req: Request, res: Response): void => {
+  const { orderRef } = req.params;
+  const order = db.getOrderByRef(orderRef);
+
+  if (!order) {
+    res.status(404).json({
+      error: 'Not Found',
+      message: `Order with reference "${orderRef}" was not found.`,
+    });
+    return;
+  }
+
+  const cafe = db.getCafeById(order.cafeId);
+
+  res.json({
+    success: true,
+    orderRef: order.orderRef,
+    orderId: order.id,
+    paymentStatus: order.paymentStatus || 'PENDING',
+    paymentMethod: order.paymentMethod || 'CASH',
+    paymentId: order.paymentId,
+    paidAt: order.paidAt,
+    total: order.total,
+    currency: cafe?.currency || 'USD',
+    currencySymbol: cafe?.currencySymbol || '$',
+    checkoutUrl: order.checkoutUrl,
+    qrPayload: order.qrPayload,
+  });
+});
+
+// 4b. YouPI-PG Webhook listener (Section 12: Webhooks, fulfilment & reconciliation)
+publicRouter.post(['/payment/webhook', '/webhooks/payment'], (req: Request, res: Response): void => {
+  const signature = (req.headers['x-gateway-signature'] || req.headers['x-signature']) as string | undefined;
+  const payload = req.body;
+  const orderId = payload?.orderId;
+  const paymentId = payload?.paymentId;
+  const status = (payload?.status || (payload?.event === 'payment.success' ? 'SUCCESS' : 'FAILED')) as string;
+
+  if (!orderId && !paymentId) {
+    res.status(400).json({
+      error: 'Bad Request',
+      message: 'Missing orderId or paymentId in webhook payload.',
+    });
+    return;
+  }
+
+  const order = (orderId ? db.getOrderByRef(orderId) : null) || (paymentId ? db.getOrderByPaymentId(paymentId) : null);
+  if (!order) {
+    res.status(404).json({
+      error: 'Not Found',
+      message: `Order not found for orderId="${orderId}", paymentId="${paymentId}".`,
+    });
+    return;
+  }
+
+  const cafe = db.getCafeById(order.cafeId);
+  const secret = cafe?.paymentConfig?.webhookSecret || process.env.YOUPI_WEBHOOK_SECRET || 'youpi_sec_live_grind789';
+
+  const rawBody = (req as any).rawBody || JSON.stringify(req.body);
+  const isValid = youpiPaymentService.verifyWebhookSignature(rawBody, signature, secret);
+
+  if (!isValid && process.env.NODE_ENV !== 'test-bypass') {
+    res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Invalid HMAC-SHA256 webhook signature.',
+    });
+    return;
+  }
+
+  if (status === 'SUCCESS' || payload?.event === 'payment.success') {
+    db.updateOrderPayment(order.id, {
+      paymentStatus: 'PAID',
+      paymentId: paymentId || order.paymentId,
+      paidAt: new Date().toISOString(),
+    });
+  } else if (status === 'FAILED' || payload?.event === 'payment.failed') {
+    db.updateOrderPayment(order.id, {
+      paymentStatus: 'FAILED',
+      paymentId: paymentId || order.paymentId,
+    });
+  }
+
+  res.status(200).json({
+    received: true,
+    orderRef: order.orderRef,
+    status: status === 'SUCCESS' ? 'PAID' : status,
+  });
+});
+
+// 4c. Payment simulation endpoint for sandbox verification
+publicRouter.post('/orders/:orderRef/simulate-payment', (req: Request, res: Response): void => {
+  const { orderRef } = req.params;
+  const order = db.getOrderByRef(orderRef);
+
+  if (!order) {
+    res.status(404).json({
+      error: 'Not Found',
+      message: `Order with reference "${orderRef}" was not found.`,
+    });
+    return;
+  }
+
+  const outcome = req.body?.outcome === 'FAILED' ? 'FAILED' : 'PAID';
+  const updated = db.updateOrderPayment(order.id, {
+    paymentStatus: outcome,
+    paidAt: outcome === 'PAID' ? new Date().toISOString() : undefined,
+  });
+
+  res.json({
+    success: true,
+    message: `Simulated payment outcome: ${outcome}`,
+    order: updated,
   });
 });
 

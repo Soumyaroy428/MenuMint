@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { CartItem, OrderType, Order, SupportedLanguage, FulfillmentType, PickupSlot } from '../types';
-import { X, Trash2, Plus, Minus, ShoppingBag, Info, AlertTriangle, ArrowRight, Tag, Heart, Users, Gift, Clock } from 'lucide-react';
+import { CartItem, OrderType, Order, SupportedLanguage, FulfillmentType, PickupSlot, PaymentMethod } from '../types';
+import { X, Trash2, Plus, Minus, ShoppingBag, AlertTriangle, ArrowRight, Tag, Heart, Users, Gift, Clock, Zap, Banknote, ShieldCheck } from 'lucide-react';
 import { submitOrder, validatePromoCode, fetchCafeLoyalty, fetchPickupSlots } from '../api';
 import { BillSplitModal } from './BillSplitModal';
 import { LoyaltyCardModal } from './LoyaltyCardModal';
@@ -81,6 +81,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [selectedSlotTime, setSelectedSlotTime] = useState<string>('');
   const [loadingSlots, setLoadingSlots] = useState<boolean>(false);
   const [slotsError, setSlotsError] = useState<string | null>(null);
+
+  // Payment Method Selection (CP-51 YouPI-PG V2)
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('YOUPI_ONLINE');
 
   const getItemName = (item: CartItem['item']) => {
     return (currentLanguage !== 'en' && item.translations && item.translations[currentLanguage]?.name) || item.name;
@@ -226,6 +229,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         fulfillmentType: orderType === 'takeaway' ? fulfillmentType : 'ASAP',
         scheduledPickupTime: orderType === 'takeaway' && fulfillmentType === 'SCHEDULED' ? selectedSlotTime : undefined,
         pickupWindow: orderType === 'takeaway' && fulfillmentType === 'SCHEDULED' ? selectedSlot?.label : undefined,
+        paymentMethod,
         items: items.map((ci) => ({
           menuItemId: ci.item.id,
           quantity: ci.quantity,
@@ -258,10 +262,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           </button>
         </div>
 
-        {/* Demo Mode Notice Banner */}
-        <div style={{ background: '#ecfdf5', borderBottom: '1px solid #a7f3d0', padding: '0.6rem 1rem', fontSize: '0.8rem', color: '#065f46', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          <Info size={16} />
-          <span><strong>Demo Mode:</strong> No payment required. Order is sent directly to the café kitchen.</span>
+        {/* Secure Checkout Notice */}
+        <div style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '0.5rem 1rem', fontSize: '0.78rem', color: '#475569', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <ShieldCheck size={15} color="#059669" />
+          <span>Secure Checkout Powered by YouPI-PG Gateway</span>
         </div>
 
         {/* Error Alert */}
@@ -620,6 +624,62 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               )}
             </div>
 
+            {/* Payment Method Selector (CP-51 YouPI-PG Gateway & Cash at Counter) */}
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '0.4rem' }}>
+                Payment Method
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('YOUPI_ONLINE')}
+                  style={{
+                    border: paymentMethod === 'YOUPI_ONLINE' ? '2px solid #059669' : '1px solid #e2e8f0',
+                    background: paymentMethod === 'YOUPI_ONLINE' ? '#f0fdf4' : '#ffffff',
+                    borderRadius: 10,
+                    padding: '0.65rem 0.5rem',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 4,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: '0.82rem', color: paymentMethod === 'YOUPI_ONLINE' ? '#065f46' : '#1e293b' }}>
+                    <Zap size={15} color="#059669" fill="#059669" />
+                    <span>Pay Online</span>
+                  </div>
+                  <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                    UPI & Cards via YouPI
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('CASH')}
+                  style={{
+                    border: paymentMethod === 'CASH' ? '2px solid #059669' : '1px solid #e2e8f0',
+                    background: paymentMethod === 'CASH' ? '#f0fdf4' : '#ffffff',
+                    borderRadius: 10,
+                    padding: '0.65rem 0.5rem',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 4,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: '0.82rem', color: paymentMethod === 'CASH' ? '#065f46' : '#1e293b' }}>
+                    <Banknote size={15} color="#059669" />
+                    <span>Pay at Counter</span>
+                  </div>
+                  <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                    Cash / Card on Pickup
+                  </span>
+                </button>
+              </div>
+            </div>
+
             {/* Price Breakdown */}
             <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '0.75rem', marginBottom: '0.75rem', fontSize: '0.85rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', marginBottom: 2 }}>
@@ -711,15 +771,24 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 fontSize: '1rem',
                 opacity: !isStoreOpen ? 0.6 : 1,
                 cursor: !isStoreOpen ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
               }}
             >
               {!isStoreOpen ? (
                 'Store Ordering Paused'
               ) : submitting ? (
                 t('cart.submitting', currentLanguage)
+              ) : paymentMethod === 'YOUPI_ONLINE' ? (
+                <>
+                  <Zap size={18} fill="#ffffff" />
+                  <span>Pay Online ({currencySymbol}{(total / 100).toFixed(2)})</span>
+                </>
               ) : (
                 <>
-                  <span>{t('cart.place_order', currentLanguage)}</span>
+                  <span>Place Order & Pay at Counter ({currencySymbol}{(total / 100).toFixed(2)})</span>
                   <ArrowRight size={18} />
                 </>
               )}

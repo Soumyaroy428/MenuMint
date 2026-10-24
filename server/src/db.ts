@@ -1,4 +1,4 @@
-import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, OrderFeedback, PrepStation, AccountingReport, TaxBreakdownLine, LoyaltyProgramConfig, LoyaltyAccount, InventorySummary, AdvanceOrderingConfig, PickupSlot } from './types.js';
+import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, OrderFeedback, PrepStation, AccountingReport, TaxBreakdownLine, LoyaltyProgramConfig, LoyaltyAccount, InventorySummary, AdvanceOrderingConfig, PickupSlot, PaymentStatus, PaymentMethod, YoupiMerchantConfig } from './types.js';
 import bcrypt from 'bcryptjs';
 
 // Pre-seeded database in memory with consistent IDs and tenant isolation
@@ -32,6 +32,16 @@ class Database {
           close: '21:00',
         },
       },
+      paymentConfig: {
+        enabled: true,
+        provider: 'YOUPI_PG',
+        merchantId: 'merch_daily_grind_01',
+        webhookSecret: 'youpi_sec_dg_live_8f3a9b',
+        upiId: 'dailygrind@upi',
+        payeeName: 'The Daily Grind Café',
+        apiUrl: process.env.YOUPI_API_URL || 'http://localhost:6100',
+        checkoutUrl: process.env.YOUPI_CHECKOUT_URL || 'http://localhost:7000',
+      },
       createdAt: new Date().toISOString(),
     },
     {
@@ -61,6 +71,16 @@ class Database {
           open: '09:00',
           close: '22:00',
         },
+      },
+      paymentConfig: {
+        enabled: true,
+        provider: 'YOUPI_PG',
+        merchantId: 'merch_bella_vista_02',
+        webhookSecret: 'youpi_sec_bv_live_4e7c1d',
+        upiId: 'bellavista@upi',
+        payeeName: 'Bella Vista Bistro',
+        apiUrl: process.env.YOUPI_API_URL || 'http://localhost:6100',
+        checkoutUrl: process.env.YOUPI_CHECKOUT_URL || 'http://localhost:7000',
       },
       createdAt: new Date().toISOString(),
     },
@@ -312,6 +332,10 @@ class Database {
       subtotal: 1445,
       tax: 72,
       total: 1517,
+      paymentStatus: 'PAID',
+      paymentMethod: 'YOUPI_ONLINE',
+      paymentId: 'youpi_init_001',
+      paidAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
       estimatedPrepMinutes: 15,
       estimatedReadyAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
       createdAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
@@ -339,6 +363,9 @@ class Database {
       subtotal: 550,
       tax: 28,
       total: 578,
+      paymentStatus: 'PENDING',
+      paymentMethod: 'YOUPI_ONLINE',
+      paymentId: 'youpi_init_002',
       estimatedPrepMinutes: 8,
       estimatedReadyAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
       createdAt: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
@@ -366,6 +393,9 @@ class Database {
       subtotal: 350,
       tax: 18,
       total: 368,
+      paymentStatus: 'PAID',
+      paymentMethod: 'CASH',
+      paidAt: new Date().toISOString(),
       estimatedPrepMinutes: 5,
       estimatedReadyAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
       createdAt: new Date().toISOString(),
@@ -743,6 +773,8 @@ class Database {
         tip: orderTip,
         total: orderTotal,
         status: o.status,
+        paymentStatus: o.paymentStatus || 'PENDING',
+        paymentMethod: o.paymentMethod || 'CASH',
       };
     });
 
@@ -830,6 +862,40 @@ class Database {
       return order;
     }
     return undefined;
+  }
+
+  updateOrderPayment(
+    orderRefOrId: string,
+    updates: {
+      paymentStatus?: PaymentStatus;
+      paymentMethod?: PaymentMethod;
+      paymentId?: string;
+      paidAt?: string;
+      checkoutUrl?: string;
+      qrPayload?: string;
+    }
+  ): Order | undefined {
+    const order = this.orders.find(
+      (o) => o.id === orderRefOrId || o.orderRef.toUpperCase() === orderRefOrId.toUpperCase()
+    );
+    if (!order) return undefined;
+
+    if (updates.paymentStatus) order.paymentStatus = updates.paymentStatus;
+    if (updates.paymentMethod) order.paymentMethod = updates.paymentMethod;
+    if (updates.paymentId) order.paymentId = updates.paymentId;
+    if (updates.checkoutUrl) order.checkoutUrl = updates.checkoutUrl;
+    if (updates.qrPayload) order.qrPayload = updates.qrPayload;
+    if (updates.paidAt) {
+      order.paidAt = updates.paidAt;
+    } else if (updates.paymentStatus === 'PAID' && !order.paidAt) {
+      order.paidAt = new Date().toISOString();
+    }
+    order.updatedAt = new Date().toISOString();
+    return order;
+  }
+
+  getOrderByPaymentId(paymentId: string): Order | undefined {
+    return this.orders.find((o) => o.paymentId === paymentId);
   }
 
   getUserByEmail(email: string): User | undefined {

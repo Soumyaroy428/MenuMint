@@ -184,9 +184,25 @@ MenuMint is a lightweight, mobile-first SaaS designed for independent cafés and
   - Enterprise Multi-Tenant Boundary Isolation Matrix: cross-tenant token tampering, order mutation, ETA modification, menu item mutation/deletion, inventory restock, and accounting statement access are strictly rejected or isolated.
   - Added dedicated Golden Master test suite verification (`npm test` and `npm run audit`) ensuring 52/52 passing tests with 100% pass rate.
 
+- **CP-51 (YouPI-PG V2 Payment Gateway Integration & Production Hardening):**
+  - Verified and integrated the official 6-page YouPI-PG V2 installation and website integration guide (`github.com/youpi-pg/YouPI-PG`).
+  - Architecture: Built robust `YoupiPaymentService` supporting standard NPCI UPI Intent URI generation (`upi://pay?pa=...`), direct REST checkout session initiation (`POST /api/v1/payments`) with `X-Merchant-Id`, and self-contained gateway checkout fallback.
+  - Webhook Reconciliation: Implemented `POST /api/payment/webhook` and `/api/webhooks/payment` verifying incoming `x-gateway-signature` HMAC-SHA256 signatures via `crypto.timingSafeEqual` constant-time comparison using merchant webhook secrets. Reconciles `SUCCESS` → `PAID` with timestamping and `FAILED` → `FAILED`.
+  - Live Status Polling: Implemented public polling endpoint `GET /api/orders/:orderRef/payment-status` for dynamic real-time in-app checkout status synchronization.
+  - Sandbox Simulator: Implemented `POST /api/orders/:orderRef/simulate-payment` allowing immediate testing of the payment reconciliation callback without external tunneling.
+  - Counter Settlement: Implemented authenticated staff endpoint `PATCH /api/dashboard/orders/:id/payment` allowing café staff to manually reconcile and mark counter cash/card orders as paid with multi-tenant isolation.
+  - Periodic Accounting & CSV Inclusion: Attached `paymentStatus` and `paymentMethod` across all accounting report models and official CSV export tables.
+  - Frontend UI/UX:
+    - Built interactive `YoupiPaymentModal.tsx` featuring real-time status badge, dynamic 220px UPI QR code generator, 1-click mobile UPI intent button, copy UPI ID button, hosted checkout link, and sandbox simulation callback.
+    - Added Payment Method selector in `CartDrawer.tsx` (⚡ Pay Online via YouPI vs. 💵 Pay at Counter).
+    - Removed all "Demo Mode" notice banners and replaced dashboard "Quick Demo Accounts:" with "Default Store Credentials:".
+    - Added payment status badges across `OrderConfirmationModal.tsx`, `TrackOrderModal.tsx`, kitchen ticket printing, and dashboard order cards.
+  - Mobile & Tablet UI/UX Overhaul: Fixed navigation header wrapping on `< 1024px`, persistent bottom navigation bar on mobile (`< 768px`), horizontal scrollable dietary category bar, and dynamic floating cart bar positioning.
+  - Comprehensive automated unit tests (53/53 passing) covering online session generation, polling, signed webhook reconciliation, staff counter settlement, and multi-tenant isolation.
+
 ---
 
-## 🏆 Checkpoint Completion Matrix (CP-00 through CP-50)
+## 🏆 Checkpoint Completion Matrix (CP-00 through CP-51)
 
 | Phase | Checkpoint Range | Description | Status |
 | :--- | :---: | :--- | :---: |
@@ -195,13 +211,14 @@ MenuMint is a lightweight, mobile-first SaaS designed for independent cafés and
 | **Phase 3** | CP-34 – CP-38 | Coupons, Customer Gratuity, Store Rush Pause, Dietary Tags & CSAT | ✅ Complete |
 | **Phase 4** | CP-39 – CP-43 | Station Routing, Prep ETA Countdown, Reorder Engine, Audio Alert & KDS | ✅ Complete |
 | **Phase 5** | CP-44 – CP-50 | Bill Splitting, Tax Reports, Loyalty Stamp Cards, Auto-86, Localization, Advance Scheduling & Golden Master Audit | ✅ Complete |
+| **Phase 6** | CP-51 | YouPI-PG V2 Gateway Integration, Mobile/Tablet UI Overhaul & Production Hardening | ✅ Complete |
 
 ---
 
 ## 🧪 Current Verification Metrics
-- **Automated Tests:** 52 / 52 passing (`npm test`, 100% pass rate)
+- **Automated Tests:** 53 / 53 passing (`npm test`, 100% pass rate)
 - **Production Audit:** Passed (`npm run audit`)
 - **Frontend Typecheck:** 0 errors (`tsc -p client/tsconfig.json`)
 - **Backend Typecheck:** 0 errors (`tsc -p server/tsconfig.json`)
-- **Vite Production Bundle:** Clean build, gzip optimized (`391 kB`)
+- **Vite Production Bundle:** Clean build, gzip optimized (`410.85 kB`)
 - **Live Deployment:** Operational at [https://menu-ordering-saas.vercel.app](https://menu-ordering-saas.vercel.app)

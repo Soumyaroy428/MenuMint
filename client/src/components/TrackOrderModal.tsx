@@ -181,6 +181,7 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
           <div class="row"><span>Customer:</span><strong>${order.customerName}</strong></div>
           <div class="row"><span>Fulfillment:</span><strong>${order.orderType} ${order.tableNumber ? `(${order.tableNumber})` : ''}</strong></div>
           <div class="row"><span>Status:</span><strong>${order.status}</strong></div>
+          <div class="row"><span>Payment:</span><strong>${order.paymentStatus === 'PAID' ? 'PAID (ONLINE)' : 'DUE AT COUNTER'}</strong></div>
           ${order.pickupWindow ? `<div class="row" style="color: #0284c7; font-weight: bold;"><span>Pickup Window:</span><strong>${order.pickupWindow}</strong></div>` : ''}
           ${order.estimatedPrepMinutes ? `<div class="row"><span>Est. Prep Time:</span><strong>~${order.estimatedPrepMinutes} mins</strong></div>` : ''}
           <hr style="border: 0; border-top: 1px dashed #ccc; margin: 10px 0;" />
@@ -381,6 +382,17 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
                 </div>
                 <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 2 }}>
                   {order.customerName} {order.tableNumber ? `• ${order.tableNumber}` : `• ${order.orderType}`}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  {order.paymentStatus === 'PAID' ? (
+                    <span className="badge badge-success" style={{ fontSize: '0.72rem', fontWeight: 700 }}>
+                      ⚡ PAID (Online UPI / Card)
+                    </span>
+                  ) : (
+                    <span className="badge badge-neutral" style={{ fontSize: '0.72rem', fontWeight: 700 }}>
+                      💵 PAY AT COUNTER ({order.paymentMethod || 'CASH'})
+                    </span>
+                  )}
                 </div>
                 {order.pickupWindow && (
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4, background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: 6, fontSize: '0.75rem', fontWeight: 700 }}>
