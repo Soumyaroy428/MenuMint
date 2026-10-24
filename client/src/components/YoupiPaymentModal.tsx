@@ -30,7 +30,7 @@ export const YoupiPaymentModal: React.FC<YoupiPaymentModalProps> = ({
   onPaymentSuccess,
   onSwitchToCash,
 }) => {
-  const [paymentStatus, setPaymentStatus] = useState<'PENDING' | 'PAID' | 'FAILED'>('PENDING');
+  const [paymentStatus, setPaymentStatus] = useState<'PENDING' | 'PROCESSING' | 'PAID' | 'FAILED' | 'EXPIRED' | 'CANCELLED'>('PENDING');
   const [isSimulating, setIsSimulating] = useState<boolean>(false);
   const [copiedUpi, setCopiedUpi] = useState<boolean>(false);
   const pollTimerRef = useRef<number | null>(null);
@@ -61,6 +61,12 @@ export const YoupiPaymentModal: React.FC<YoupiPaymentModalProps> = ({
             }, 1200);
           } else if (data.paymentStatus === 'FAILED') {
             setPaymentStatus('FAILED');
+          } else if (data.paymentStatus === 'EXPIRED') {
+            setPaymentStatus('EXPIRED');
+          } else if (data.paymentStatus === 'CANCELLED') {
+            setPaymentStatus('CANCELLED');
+          } else if (data.paymentStatus === 'PROCESSING') {
+            setPaymentStatus('PROCESSING');
           }
         }
       } catch {
@@ -227,6 +233,57 @@ export const YoupiPaymentModal: React.FC<YoupiPaymentModalProps> = ({
                 <AlertCircle size={18} color="#dc2626" />
                 <span>Payment Authorization Failed</span>
               </div>
+            ) : paymentStatus === 'EXPIRED' ? (
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  background: '#fee2e2',
+                  color: '#991b1b',
+                  padding: '0.4rem 1rem',
+                  borderRadius: 9999,
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                }}
+              >
+                <AlertCircle size={18} color="#dc2626" />
+                <span>Payment Session Expired</span>
+              </div>
+            ) : paymentStatus === 'CANCELLED' ? (
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  background: '#f1f5f9',
+                  color: '#475569',
+                  padding: '0.4rem 1rem',
+                  borderRadius: 9999,
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                }}
+              >
+                <AlertCircle size={18} color="#64748b" />
+                <span>Payment Cancelled</span>
+              </div>
+            ) : paymentStatus === 'PROCESSING' ? (
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  background: '#eff6ff',
+                  color: '#1d4ed8',
+                  padding: '0.4rem 1rem',
+                  borderRadius: 9999,
+                  fontWeight: 600,
+                  fontSize: '0.82rem',
+                }}
+              >
+                <RefreshCw size={16} className="spin-slow" />
+                <span>Verifying UPI Credit Alert...</span>
+              </div>
             ) : (
               <div
                 style={{
@@ -320,6 +377,25 @@ export const YoupiPaymentModal: React.FC<YoupiPaymentModalProps> = ({
           {/* Action Buttons */}
           {paymentStatus !== 'PAID' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+              {(paymentStatus === 'FAILED' || paymentStatus === 'EXPIRED' || paymentStatus === 'CANCELLED') && (
+                <button
+                  type="button"
+                  onClick={() => setPaymentStatus('PENDING')}
+                  className="btn btn-primary"
+                  style={{
+                    width: '100%',
+                    justifyContent: 'center',
+                    gap: 8,
+                    padding: '0.7rem',
+                    fontSize: '0.9rem',
+                    background: '#059669',
+                  }}
+                >
+                  <RefreshCw size={16} />
+                  <span>Retry UPI Payment</span>
+                </button>
+              )}
+
               {/* Direct UPI Intent (for mobile devices) */}
               <a
                 href={qrData}

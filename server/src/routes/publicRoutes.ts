@@ -626,10 +626,12 @@ publicRouter.get('/orders/:orderRef/payment-status', (req: Request, res: Respons
 // 4b. YouPI-PG Webhook listener (Section 12: Webhooks, fulfilment & reconciliation)
 publicRouter.post(['/payment/webhook', '/webhooks/payment'], (req: Request, res: Response): void => {
   const signature = (req.headers['x-gateway-signature'] || req.headers['x-signature']) as string | undefined;
+  const deliveryId = (req.headers['x-gateway-delivery-id'] || req.headers['x-delivery-id']) as string | undefined;
+  const timestamp = (req.headers['x-gateway-timestamp'] || req.headers['x-timestamp']) as string | undefined;
+
   const payload = req.body;
   const orderId = payload?.orderId;
   const paymentId = payload?.paymentId;
-  const status = (payload?.status || (payload?.event === 'payment.success' ? 'SUCCESS' : 'FAILED')) as string;
 
   if (!orderId && !paymentId) {
     res.status(400).json({
@@ -652,33 +654,24 @@ publicRouter.post(['/payment/webhook', '/webhooks/payment'], (req: Request, res:
   const secret = cafe?.paymentConfig?.webhookSecret || process.env.YOUPI_WEBHOOK_SECRET || 'youpi_sec_live_grind789';
 
   const rawBody = (req as any).rawBody || JSON.stringify(req.body);
-  const isValid = youpiPaymentService.verifyWebhookSignature(rawBody, signature, secret);
+  const isValid = youpiPaymentService.verifyWebhookSignature(rawBody, signature, secret, timestamp);
 
   if (!isValid && process.env.NODE_ENV !== 'test-bypass') {
     res.status(401).json({
       error: 'Unauthorized',
-      message: 'Invalid HMAC-SHA256 webhook signature.',
+      message: 'Invalid HMAC-SHA256 webhook signature or stale timestamp.',
     });
     return;
   }
 
-  if (status === 'SUCCESS' || payload?.event === 'payment.success') {
-    db.updateOrderPayment(order.id, {
-      paymentStatus: 'PAID',
-      paymentId: paymentId || order.paymentId,
-      paidAt: new Date().toISOString(),
-    });
-  } else if (status === 'FAILED' || payload?.event === 'payment.failed') {
-    db.updateOrderPayment(order.id, {
-      paymentStatus: 'FAILED',
-      paymentId: paymentId || order.paymentId,
-    });
-  }
+  const result = youpiPaymentService.processWebhookEvent(payload, deliveryId);
 
   res.status(200).json({
     received: true,
+    deduplicated: result.deduplicated,
     orderRef: order.orderRef,
-    status: status === 'SUCCESS' ? 'PAID' : status,
+    status: result.status,
+    message: result.message,
   });
 });
 

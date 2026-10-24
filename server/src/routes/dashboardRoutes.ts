@@ -206,8 +206,16 @@ dashboardRouter.patch('/orders/:id/payment', (req: AuthenticatedRequest, res: Re
   }
 
   const targetStatus: PaymentStatus = paymentStatus || 'PAID';
-  const updates: { paymentStatus: PaymentStatus; paymentMethod?: PaymentMethod; paidAt?: string } = {
+  const updates: {
+    paymentStatus: PaymentStatus;
+    paymentMethod?: PaymentMethod;
+    paidAt?: string;
+    source: 'COUNTER_STAFF';
+    reason: string;
+  } = {
     paymentStatus: targetStatus,
+    source: 'COUNTER_STAFF',
+    reason: `Staff counter settlement by ${req.user!.name || req.user!.email || 'staff'}`,
   };
 
   if (targetStatus === 'PAID') {

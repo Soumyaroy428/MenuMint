@@ -4,9 +4,31 @@ export type OrderType = 'dine-in' | 'takeaway';
 
 export type FulfillmentType = 'ASAP' | 'SCHEDULED';
 
-export type PaymentStatus = 'UNPAID' | 'PENDING' | 'PAID' | 'FAILED' | 'CANCELLED' | 'REFUNDED';
+export type PaymentStatus = 'UNPAID' | 'PENDING' | 'PROCESSING' | 'PAID' | 'FAILED' | 'EXPIRED' | 'CANCELLED' | 'REFUNDED';
 
 export type PaymentMethod = 'YOUPI_ONLINE' | 'UPI' | 'CARD' | 'CASH';
+
+export interface PaymentAuditEntry {
+  fromStatus: PaymentStatus;
+  toStatus: PaymentStatus;
+  reason?: string;
+  source: 'WEBHOOK' | 'STATUS_POLL' | 'COUNTER_STAFF' | 'SESSION_CREATION' | 'SIMULATION';
+  timestamp: string;
+  deliveryId?: string;
+  utr?: string;
+}
+
+export interface PaymentAttempt {
+  id: string; // unique local payment attempt ID
+  orderId: string;
+  gatewayPaymentId?: string; // YouPI-PG paymentId
+  amountPaise: number; // integer minor units (paise)
+  currency: string; // 'INR'
+  status: PaymentStatus;
+  utr?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface YoupiMerchantConfig {
   enabled: boolean;
@@ -157,9 +179,15 @@ export interface Order {
   taxRate?: number; // Snapshot tax rate percentage at order time
   taxName?: string; // Snapshot tax label at order time
   total: number;
-  paymentStatus?: PaymentStatus;    // YouPI-PG: 'UNPAID' | 'PENDING' | 'PAID' | 'FAILED'
-  paymentMethod?: PaymentMethod;    // YouPI-PG: 'YOUPI_ONLINE' | 'UPI' | 'CARD' | 'CASH'
+  amountPaise?: number;             // Exact integer minor units (paise)
+  currency?: string;                // Currency code (e.g. 'INR')
+  paymentStatus?: PaymentStatus;    // YouPI-PG state: 'UNPAID' | 'PENDING' | 'PROCESSING' | 'PAID' | 'FAILED' | 'EXPIRED' | 'CANCELLED'
+  paymentMethod?: PaymentMethod;    // 'YOUPI_ONLINE' | 'UPI' | 'CARD' | 'CASH'
   paymentId?: string;               // Gateway transaction reference
+  paymentAttemptId?: string;        // Local attempt UUID for idempotency
+  utr?: string;                     // Bank UTR reference number from verified observer
+  webhookDeliveryId?: string;       // Deduplication ID of last processed webhook delivery
+  paymentAuditTrail?: PaymentAuditEntry[]; // Audit trail of all payment state transitions
   paidAt?: string;                  // ISO timestamp of payment confirmation
   checkoutUrl?: string;             // Hosted YouPI checkout portal URL
   qrPayload?: string;               // UPI Intent string for QR code generation

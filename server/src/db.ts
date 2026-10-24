@@ -1,4 +1,4 @@
-import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, OrderFeedback, PrepStation, AccountingReport, TaxBreakdownLine, LoyaltyProgramConfig, LoyaltyAccount, InventorySummary, AdvanceOrderingConfig, PickupSlot, PaymentStatus, PaymentMethod, YoupiMerchantConfig } from './types.js';
+import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, OrderFeedback, PrepStation, AccountingReport, TaxBreakdownLine, LoyaltyProgramConfig, LoyaltyAccount, InventorySummary, AdvanceOrderingConfig, PickupSlot, PaymentStatus, PaymentMethod, PaymentAuditEntry, YoupiMerchantConfig } from './types.js';
 import bcrypt from 'bcryptjs';
 
 // Pre-seeded database in memory with consistent IDs and tenant isolation
@@ -601,10 +601,23 @@ class Database {
   }
 
   createOrder(order: Omit<Order, 'id' | 'orderRef' | 'createdAt' | 'updatedAt'>): Order {
+    const initialStatus = order.paymentStatus || 'PENDING';
     const newOrder: Order = {
       ...order,
       id: `ord-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       orderRef: `ORD-${this.orderCounter++}`,
+      amountPaise: order.amountPaise ?? Math.round(order.total),
+      currency: order.currency || 'INR',
+      paymentStatus: initialStatus,
+      paymentAuditTrail: [
+        {
+          fromStatus: 'UNPAID',
+          toStatus: initialStatus,
+          source: 'SESSION_CREATION',
+          timestamp: new Date().toISOString(),
+          reason: 'Initial order creation',
+        },
+      ],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -864,6 +877,24 @@ class Database {
     return undefined;
   }
 
+  // Webhook Delivery Idempotency Store
+  private processedWebhookDeliveries: Map<string, { orderRef: string; timestamp: number }> = new Map();
+
+  isWebhookDeliveryProcessed(deliveryId: string): boolean {
+    if (!deliveryId) return false;
+    return this.processedWebhookDeliveries.has(deliveryId);
+  }
+
+  recordWebhookDelivery(deliveryId: string, orderRef: string): void {
+    if (!deliveryId) return;
+    this.processedWebhookDeliveries.set(deliveryId, { orderRef, timestamp: Date.now() });
+    // Guard against memory leaks: prune oldest if size exceeds 5000
+    if (this.processedWebhookDeliveries.size > 5000) {
+      const oldestKey = this.processedWebhookDeliveries.keys().next().value;
+      if (oldestKey) this.processedWebhookDeliveries.delete(oldestKey);
+    }
+  }
+
   updateOrderPayment(
     orderRefOrId: string,
     updates: {
@@ -873,6 +904,10 @@ class Database {
       paidAt?: string;
       checkoutUrl?: string;
       qrPayload?: string;
+      utr?: string;
+      deliveryId?: string;
+      source?: 'WEBHOOK' | 'STATUS_POLL' | 'COUNTER_STAFF' | 'SESSION_CREATION' | 'SIMULATION';
+      reason?: string;
     }
   ): Order | undefined {
     const order = this.orders.find(
@@ -880,14 +915,42 @@ class Database {
     );
     if (!order) return undefined;
 
-    if (updates.paymentStatus) order.paymentStatus = updates.paymentStatus;
+    const fromStatus: PaymentStatus = order.paymentStatus || 'UNPAID';
+    const toStatus: PaymentStatus | undefined = updates.paymentStatus;
+
+    if (toStatus && toStatus !== fromStatus) {
+      // Invariant: Once PAID, never downgrade to FAILED, EXPIRED, CANCELLED, or PENDING
+      if (fromStatus === 'PAID' && (toStatus === 'FAILED' || toStatus === 'EXPIRED' || toStatus === 'CANCELLED' || toStatus === 'PENDING')) {
+        console.warn(`[Payment State Machine] Blocked downgrade attempt for order ${order.orderRef}: ${fromStatus} -> ${toStatus}`);
+        return order; // Do not downgrade paid order
+      }
+
+      order.paymentStatus = toStatus;
+
+      // Append to safe audit trail
+      if (!order.paymentAuditTrail) {
+        order.paymentAuditTrail = [];
+      }
+      order.paymentAuditTrail.push({
+        fromStatus,
+        toStatus,
+        reason: updates.reason,
+        source: updates.source || 'WEBHOOK',
+        timestamp: new Date().toISOString(),
+        deliveryId: updates.deliveryId,
+        utr: updates.utr || order.utr,
+      });
+    }
+
     if (updates.paymentMethod) order.paymentMethod = updates.paymentMethod;
     if (updates.paymentId) order.paymentId = updates.paymentId;
     if (updates.checkoutUrl) order.checkoutUrl = updates.checkoutUrl;
     if (updates.qrPayload) order.qrPayload = updates.qrPayload;
+    if (updates.utr) order.utr = updates.utr;
+    if (updates.deliveryId) order.webhookDeliveryId = updates.deliveryId;
     if (updates.paidAt) {
       order.paidAt = updates.paidAt;
-    } else if (updates.paymentStatus === 'PAID' && !order.paidAt) {
+    } else if (order.paymentStatus === 'PAID' && !order.paidAt) {
       order.paidAt = new Date().toISOString();
     }
     order.updatedAt = new Date().toISOString();

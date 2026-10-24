@@ -4,9 +4,31 @@ export type OrderType = 'dine-in' | 'takeaway';
 
 export type FulfillmentType = 'ASAP' | 'SCHEDULED';
 
-export type PaymentStatus = 'UNPAID' | 'PENDING' | 'PAID' | 'FAILED' | 'CANCELLED' | 'REFUNDED';
+export type PaymentStatus = 'UNPAID' | 'PENDING' | 'PROCESSING' | 'PAID' | 'FAILED' | 'EXPIRED' | 'CANCELLED' | 'REFUNDED';
 
 export type PaymentMethod = 'YOUPI_ONLINE' | 'UPI' | 'CARD' | 'CASH';
+
+export interface PaymentAuditEntry {
+  fromStatus: PaymentStatus;
+  toStatus: PaymentStatus;
+  reason?: string;
+  source: 'WEBHOOK' | 'STATUS_POLL' | 'COUNTER_STAFF' | 'SESSION_CREATION' | 'SIMULATION';
+  timestamp: string;
+  deliveryId?: string;
+  utr?: string;
+}
+
+export interface PaymentAttempt {
+  id: string;
+  orderId: string;
+  gatewayPaymentId?: string;
+  amountPaise: number;
+  currency: string;
+  status: PaymentStatus;
+  utr?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface YoupiMerchantConfig {
   enabled: boolean;
@@ -162,9 +184,15 @@ export interface Order {
   taxRate?: number;
   taxName?: string;
   total: number;
+  amountPaise?: number;
+  currency?: string;
   paymentStatus?: PaymentStatus;
   paymentMethod?: PaymentMethod;
   paymentId?: string;
+  paymentAttemptId?: string;
+  utr?: string;
+  webhookDeliveryId?: string;
+  paymentAuditTrail?: PaymentAuditEntry[];
   paidAt?: string;
   checkoutUrl?: string;
   qrPayload?: string;
