@@ -115,6 +115,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
   const [loadingData, setLoadingData] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [stationFilter, setStationFilter] = useState<'all' | 'BARISTA' | 'KITCHEN' | 'BAKERY'>('all');
+  const [fulfillmentFilter, setFulfillmentFilter] = useState<'all' | 'ASAP' | 'SCHEDULED'>('all');
   const [orderSearch, setOrderSearch] = useState<string>('');
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -766,6 +767,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
             <div class="bold">${ord.orderType.toUpperCase()} ${ord.tableNumber ? '• ' + ord.tableNumber : ''}</div>
             <div>${new Date(ord.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
             <div style="margin-top:4px">Customer: ${ord.customerName}</div>
+            ${ord.pickupWindow ? `<div style="background: #000; color: #fff; padding: 4px; margin: 4px 0; font-weight: bold; font-size: 11px;">*** SCHEDULED PICKUP: ${ord.pickupWindow} ***</div>` : ''}
             ${ord.estimatedPrepMinutes ? `<div style="margin-top:2px; font-weight: bold;">EST. PREP TIME: ~${ord.estimatedPrepMinutes} MINS</div>` : ''}
           </div>
           <div class="dashed"></div>
@@ -935,12 +937,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
     document.body.removeChild(link);
   };
 
-  // Filter orders with status, prep station routing, and search term (CP-39)
+  // Filter orders with status, prep station routing, fulfillment type, and search term (CP-39 & CP-49)
   const filteredOrders = orders.filter((o) => {
     const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
     const matchesStation =
       stationFilter === 'all' ||
       o.items.some((i) => (i.prepStation || 'BARISTA') === stationFilter);
+    const matchesFulfillment =
+      fulfillmentFilter === 'all' ||
+      (fulfillmentFilter === 'SCHEDULED' ? o.fulfillmentType === 'SCHEDULED' : o.fulfillmentType !== 'SCHEDULED');
     const q = orderSearch.toLowerCase().trim();
     const matchesSearch =
       !q ||
@@ -948,7 +953,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
       o.customerName.toLowerCase().includes(q) ||
       (o.tableNumber && o.tableNumber.toLowerCase().includes(q)) ||
       (o.customerPhone && o.customerPhone.toLowerCase().includes(q));
-    return matchesStatus && matchesStation && matchesSearch;
+    return matchesStatus && matchesStation && matchesFulfillment && matchesSearch;
   });
 
   const baristaCount = orders.filter((o) =>
@@ -960,6 +965,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
   const bakeryCount = orders.filter((o) =>
     o.items.some((i) => i.prepStation === 'BAKERY')
   ).length;
+  const scheduledCount = orders.filter((o) => o.fulfillmentType === 'SCHEDULED').length;
+  const asapCount = orders.filter((o) => o.fulfillmentType !== 'SCHEDULED').length;
 
   const totalRevenue = orders
     .filter((o) => o.status !== 'CANCELLED')
@@ -1306,6 +1313,37 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
             </button>
           </div>
 
+          {/* Fulfillment Filter Bar (CP-49) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: '0.25rem' }}>
+              Fulfillment:
+            </span>
+            <button
+              type="button"
+              className={`btn btn-sm ${fulfillmentFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem' }}
+              onClick={() => setFulfillmentFilter('all')}
+            >
+              All ({orders.length})
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${fulfillmentFilter === 'ASAP' ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem' }}
+              onClick={() => setFulfillmentFilter('ASAP')}
+            >
+              ⚡ Active Now ({asapCount})
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${fulfillmentFilter === 'SCHEDULED' ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem' }}
+              onClick={() => setFulfillmentFilter('SCHEDULED')}
+            >
+              🕒 Scheduled ({scheduledCount})
+            </button>
+          </div>
+
           {/* Status Filters */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '1.25rem' }}>
             {['all', 'PENDING', 'ACCEPTED', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED'].map((st) => (
@@ -1376,6 +1414,27 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
                         <div style={{ color: '#64748b', fontSize: '0.75rem' }}>{ord.customerPhone}</div>
                       )}
                     </div>
+
+                    {ord.pickupWindow && (
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          marginBottom: '0.5rem',
+                          background: '#e0f2fe',
+                          color: '#0369a1',
+                          border: '1px solid #bae6fd',
+                          padding: '2px 8px',
+                          borderRadius: 6,
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                        }}
+                      >
+                        <Clock size={12} />
+                        <span>Scheduled Pickup: {ord.pickupWindow}</span>
+                      </div>
+                    )}
 
                     {ord.notes && (
                       <div style={{ background: '#fef3c7', padding: '0.35rem 0.6rem', borderRadius: 6, fontSize: '0.75rem', color: '#92400e', marginBottom: '0.5rem' }}>

@@ -49,6 +49,7 @@ publicRouter.get('/cafes/:slug', (req: Request, res: Response): void => {
       isOpen: cafe.isOpen,
       pauseReason: cafe.pauseReason,
       loyaltyProgram: cafe.loyaltyProgram,
+      advanceOrdering: cafe.advanceOrdering,
     },
   });
 });
@@ -103,15 +104,57 @@ publicRouter.get('/cafes/:slug/menu', (req: Request, res: Response): void => {
       isOpen: cafe.isOpen,
       pauseReason: cafe.pauseReason,
       loyaltyProgram: cafe.loyaltyProgram,
+      advanceOrdering: cafe.advanceOrdering,
     },
     categories,
     items,
   });
 });
 
+// 2.1 Get available pickup slots for advance scheduled orders (CP-49)
+publicRouter.get('/cafes/:slug/pickup-slots', (req: Request, res: Response): void => {
+  const { slug } = req.params;
+  const { date } = req.query;
+  const cafe = db.getCafeBySlug(slug);
+
+  if (!cafe) {
+    res.status(404).json({
+      error: 'Not Found',
+      message: `Café with slug "${slug}" was not found.`,
+    });
+    return;
+  }
+
+  const slotsData = db.getPickupSlots(cafe.id, date as string | undefined);
+  res.json({
+    success: true,
+    cafe: {
+      id: cafe.id,
+      name: cafe.name,
+      slug: cafe.slug,
+    },
+    ...slotsData,
+  });
+});
+
 // 3. Submit an order (Server-authoritative calculation and validation)
 publicRouter.post('/orders', (req: Request, res: Response): void => {
-  const { cafeSlug, cafeId, orderType, customerName, customerPhone, tableNumber, notes, items, promoCode, tip, useLoyaltyReward } = req.body;
+  const {
+    cafeSlug,
+    cafeId,
+    orderType,
+    customerName,
+    customerPhone,
+    tableNumber,
+    notes,
+    items,
+    promoCode,
+    tip,
+    useLoyaltyReward,
+    fulfillmentType,
+    scheduledPickupTime,
+    pickupWindow,
+  } = req.body;
 
   // Resolve café
   const cafe = cafeSlug ? db.getCafeBySlug(cafeSlug) : db.getCafeById(cafeId);
@@ -141,6 +184,71 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
   }
 
   const validOrderType: OrderType = orderType === 'takeaway' ? 'takeaway' : 'dine-in';
+
+  // Validate Scheduled Advance Ordering (CP-49)
+  const isScheduled = fulfillmentType === 'SCHEDULED';
+  if (isScheduled) {
+    if (!cafe.advanceOrdering || !cafe.advanceOrdering.enabled) {
+      res.status(400).json({
+        error: 'Advance Ordering Disabled',
+        message: `Advance scheduled ordering is currently disabled at ${cafe.name}.`,
+      });
+      return;
+    }
+
+    if (!scheduledPickupTime || typeof scheduledPickupTime !== 'string') {
+      res.status(400).json({
+        error: 'Invalid Scheduled Time',
+        message: 'A valid scheduled pickup time is required for advance scheduled orders.',
+      });
+      return;
+    }
+
+    const pickupDate = new Date(scheduledPickupTime);
+    if (isNaN(pickupDate.getTime())) {
+      res.status(400).json({
+        error: 'Invalid Scheduled Time',
+        message: 'Scheduled pickup time must be a valid ISO date timestamp.',
+      });
+      return;
+    }
+
+    const now = new Date();
+    const minLeadTimeMs = (cafe.advanceOrdering.leadTimeMinutes || 20) * 60 * 1000;
+    // Allow 30 seconds of client/server clock tolerance
+    if (pickupDate.getTime() < now.getTime() + minLeadTimeMs - 30000) {
+      res.status(400).json({
+        error: 'Advance Lead Time Required',
+        message: `Scheduled orders require at least ${cafe.advanceOrdering.leadTimeMinutes} minutes advance lead time.`,
+      });
+      return;
+    }
+
+    const maxAdvanceDays = cafe.advanceOrdering.maxDaysInAdvance || 2;
+    const maxAdvanceMs = maxAdvanceDays * 24 * 60 * 60 * 1000;
+    if (pickupDate.getTime() > now.getTime() + maxAdvanceMs + 86400000) {
+      res.status(400).json({
+        error: 'Exceeded Advance Window',
+        message: `Orders can only be scheduled up to ${maxAdvanceDays} days in advance.`,
+      });
+      return;
+    }
+
+    // Validate operating hours
+    const [openH, openM] = (cafe.advanceOrdering.operatingHours.open || '07:00').split(':').map(Number);
+    const [closeH, closeM] = (cafe.advanceOrdering.operatingHours.close || '21:00').split(':').map(Number);
+    const pickupMinutes = pickupDate.getHours() * 60 + pickupDate.getMinutes();
+    const openMinutes = openH * 60 + openM;
+    const closeMinutes = closeH * 60 + closeM;
+
+    if (pickupMinutes < openMinutes || pickupMinutes > closeMinutes) {
+      res.status(400).json({
+        error: 'Outside Operating Hours',
+        message: `Pickup time must fall within café operating hours (${cafe.advanceOrdering.operatingHours.open} - ${cafe.advanceOrdering.operatingHours.close}).`,
+      });
+      return;
+    }
+  }
 
   // Validate items list
   if (!Array.isArray(items) || items.length === 0) {
@@ -351,6 +459,9 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
     total: calculatedTotal,
     estimatedPrepMinutes,
     estimatedReadyAt,
+    fulfillmentType: isScheduled ? 'SCHEDULED' : 'ASAP',
+    scheduledPickupTime: isScheduled ? scheduledPickupTime : undefined,
+    pickupWindow: isScheduled ? (pickupWindow || undefined) : undefined,
   });
 
   res.status(201).json({
@@ -377,6 +488,9 @@ publicRouter.post('/orders', (req: Request, res: Response): void => {
       total: newOrder.total,
       estimatedPrepMinutes: newOrder.estimatedPrepMinutes,
       estimatedReadyAt: newOrder.estimatedReadyAt,
+      fulfillmentType: newOrder.fulfillmentType,
+      scheduledPickupTime: newOrder.scheduledPickupTime,
+      pickupWindow: newOrder.pickupWindow,
       currency: cafe.currency,
       currencySymbol: cafe.currencySymbol,
       createdAt: newOrder.createdAt,
@@ -433,6 +547,9 @@ publicRouter.get('/orders/:orderRef', (req: Request, res: Response): void => {
       total: order.total,
       estimatedPrepMinutes: order.estimatedPrepMinutes,
       estimatedReadyAt: order.estimatedReadyAt,
+      fulfillmentType: order.fulfillmentType,
+      scheduledPickupTime: order.scheduledPickupTime,
+      pickupWindow: order.pickupWindow,
       feedback: order.feedback,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,

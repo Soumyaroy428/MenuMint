@@ -21,10 +21,10 @@ const VALID_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 const ALLOWED_DIETARY_TAGS = ['VEGAN', 'VEGETARIAN', 'GLUTEN_FREE', 'NUT_FREE', 'SPICY', 'CHEF_SPECIAL'];
 const ALLOWED_PREP_STATIONS: PrepStation[] = ['BARISTA', 'KITCHEN', 'BAKERY'];
 
-// 1. Get orders for the authenticated café (Strict Tenant Isolation with Prep Station filter - CP-39)
+// 1. Get orders for the authenticated café (Strict Tenant Isolation with Prep Station & Fulfillment filter)
 dashboardRouter.get('/orders', (req: AuthenticatedRequest, res: Response): void => {
   const cafeId = req.user!.cafeId;
-  const { station } = req.query;
+  const { station, fulfillment } = req.query;
   let orders = db.getOrdersByCafeId(cafeId);
 
   if (station && typeof station === 'string' && station.trim() !== 'all') {
@@ -32,6 +32,15 @@ dashboardRouter.get('/orders', (req: AuthenticatedRequest, res: Response): void 
     orders = orders.filter((o) =>
       o.items.some((i) => (i.prepStation || 'BARISTA') === targetStation)
     );
+  }
+
+  if (fulfillment && typeof fulfillment === 'string') {
+    const f = fulfillment.trim().toUpperCase();
+    if (f === 'SCHEDULED') {
+      orders = orders.filter((o) => o.fulfillmentType === 'SCHEDULED');
+    } else if (f === 'ASAP') {
+      orders = orders.filter((o) => o.fulfillmentType !== 'SCHEDULED');
+    }
   }
 
   res.json({
@@ -841,6 +850,85 @@ dashboardRouter.patch('/items/:id/stock', (req: AuthenticatedRequest, res: Respo
     success: true,
     message: `Stock for "${updated.name}" updated successfully.`,
     item: updated,
+  });
+});
+
+// 23. CP-49: Update café advance scheduled ordering policy
+dashboardRouter.patch('/cafe/advance-ordering', (req: AuthenticatedRequest, res: Response): void => {
+  const cafeId = req.user!.cafeId;
+  const { enabled, leadTimeMinutes, slotIntervalMinutes, maxDaysInAdvance, operatingHours } = req.body;
+
+  const updates: any = {};
+  if (typeof enabled === 'boolean') {
+    updates.enabled = enabled;
+  }
+
+  if (leadTimeMinutes !== undefined) {
+    const lead = Number(leadTimeMinutes);
+    if (!Number.isInteger(lead) || lead < 5 || lead > 240) {
+      res.status(400).json({
+        error: 'Validation Error',
+        message: 'Lead time minutes must be an integer between 5 and 240.',
+      });
+      return;
+    }
+    updates.leadTimeMinutes = lead;
+  }
+
+  if (slotIntervalMinutes !== undefined) {
+    const slot = Number(slotIntervalMinutes);
+    if (!Number.isInteger(slot) || slot < 5 || slot > 120) {
+      res.status(400).json({
+        error: 'Validation Error',
+        message: 'Slot interval minutes must be an integer between 5 and 120.',
+      });
+      return;
+    }
+    updates.slotIntervalMinutes = slot;
+  }
+
+  if (maxDaysInAdvance !== undefined) {
+    const maxDays = Number(maxDaysInAdvance);
+    if (!Number.isInteger(maxDays) || maxDays < 1 || maxDays > 14) {
+      res.status(400).json({
+        error: 'Validation Error',
+        message: 'Max days in advance must be an integer between 1 and 14.',
+      });
+      return;
+    }
+    updates.maxDaysInAdvance = maxDays;
+  }
+
+  if (operatingHours && typeof operatingHours === 'object') {
+    const { open, close } = operatingHours;
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (open && !timeRegex.test(open)) {
+      res.status(400).json({
+        error: 'Validation Error',
+        message: 'Operating hours open must be in HH:MM format (e.g. 07:00).',
+      });
+      return;
+    }
+    if (close && !timeRegex.test(close)) {
+      res.status(400).json({
+        error: 'Validation Error',
+        message: 'Operating hours close must be in HH:MM format (e.g. 21:00).',
+      });
+      return;
+    }
+    updates.operatingHours = { open, close };
+  }
+
+  const updatedConfig = db.updateAdvanceOrderingConfig(cafeId, updates);
+  if (!updatedConfig) {
+    res.status(404).json({ error: 'Not Found', message: 'Café not found.' });
+    return;
+  }
+
+  res.json({
+    success: true,
+    message: 'Advance ordering configuration updated successfully.',
+    config: updatedConfig,
   });
 });
 

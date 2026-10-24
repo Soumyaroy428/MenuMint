@@ -3,8 +3,8 @@
 **Project:** MenuMint — Multi-tenant Digital Menu & Ordering SaaS for Cafés & Restaurants  
 **Live Production URL:** [https://menu-ordering-saas.vercel.app](https://menu-ordering-saas.vercel.app)  
 **Repository:** `https://github.com/Soumyaroy428/MenuMint.git` (Branch: `main`)  
-**Latest Deployed Commit:** `8654673` (Local ready: CP-48 Multi-Language Menu Localization)  
-**Automated Test Suite:** 50 / 50 Tests Passing (100% Pass Rate)  
+**Latest Deployed Commit:** `e5de542`  
+**Automated Test Suite:** 51 / 51 Tests Passing (100% Pass Rate)  
 **Generated On:** October 24, 2026  
 
 ---
@@ -164,20 +164,29 @@ MenuMint is a lightweight, mobile-first SaaS designed for independent cafés and
   - Dynamic client-side translation resolution ensuring instant reactivity without page reloads while preserving model translations.
   - Comprehensive automated unit tests (50/50 passing) verifying Spanish, French, Italian, automatic English fallbacks, and multi-tenant multilingual data isolation.
 
+- **CP-49 (Scheduled Advance Ordering & Pickup Windows Engine):**
+  - Flexible fulfillment selector (`FulfillmentType = 'ASAP' | 'SCHEDULED'`) on takeaway orders allowing customers to pick future time-slots.
+  - Server-side slot generation algorithm (`db.getPickupSlots(cafeId, dateStr)`) generating curated intervals (e.g. 15-minute or 30-minute slots) bounded by store operating hours and minimum preparation lead time buffer.
+  - Robust backend validation on `POST /api/orders`: rejects orders when advance ordering is disabled, rejects requested times outside operating hours, and rejects slots violating lead time requirements.
+  - Public time-slot availability endpoint (`GET /api/cafes/:slug/pickup-slots?date=YYYY-MM-DD`).
+  - Owner dashboard advance ordering configuration (`PATCH /api/dashboard/cafe/advance-ordering`) controlling enabled status, lead times (minutes), slot intervals, and daily operating windows.
+  - Customer Cart Drawer integration with dynamic time-slot picker, date selector, and visual pickup badge on confirmation and order tracking modals.
+  - Kitchen Display System & Dashboard integration: Scheduled pickup badges on order cards, monospace scheduled header on printed kitchen tickets, and fulfillment filter pills (`All | ⚡ Active Now | 🕒 Scheduled`).
+  - Comprehensive automated unit tests (51/51 passing) verifying slot generation, advance validation, lead time buffer enforcement, fulfillment filtering, and multi-tenant isolation.
+
 ---
 
-## 🔮 Upcoming Feature Checkpoints (CP-49 – CP-50)
+## 🔮 Upcoming Feature Checkpoints (CP-50)
 
 | Checkpoint | Status | Description |
 | :--- | :---: | :--- |
-| **CP-49** | *Next Up* | **Scheduled Advance Ordering & Pickup Windows**<br>Curated time-slot selection for scheduled takeaway orders. |
-| **CP-50** | *Queued* | **Golden Master Production Audit & Performance Benchmark**<br>Comprehensive security, Lighthouse performance, and multi-tenant audit. |
+| **CP-50** | *Next Up* | **Golden Master Production Audit & Performance Benchmark**<br>Comprehensive multi-tenant security verification, edge audit, end-to-end regression validation, and final milestone sign-off. |
 
 ---
 
 ## 🧪 Current Verification Metrics
-- **Automated Tests:** 50 / 50 passing (`npm test`, 100% pass rate)
+- **Automated Tests:** 51 / 51 passing (`npm test`, 100% pass rate)
 - **Frontend Typecheck:** 0 errors (`tsc -p client/tsconfig.json`)
 - **Backend Typecheck:** 0 errors (`tsc -p server/tsconfig.json`)
-- **Vite Production Bundle:** Clean build, gzip optimized (`385 kB`)
+- **Vite Production Bundle:** Clean build, gzip optimized (`391 kB`)
 - **Live Deployment:** Operational at [https://menu-ordering-saas.vercel.app](https://menu-ordering-saas.vercel.app)

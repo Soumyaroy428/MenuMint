@@ -452,6 +452,25 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
                       {ord.tableNumber ? `Table: ${ord.tableNumber} • ` : ''}
                       {ord.customerName} • {ord.currencySymbol || currencySymbol}{(ord.total / 100).toFixed(2)}
                     </div>
+                    {ord.pickupWindow && (
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          marginTop: 3,
+                          background: '#0284c7',
+                          color: '#ffffff',
+                          padding: '1px 6px',
+                          borderRadius: 4,
+                          fontSize: '0.68rem',
+                          fontWeight: 800,
+                        }}
+                      >
+                        <Clock size={10} />
+                        <span>Pickup: {ord.pickupWindow}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Elapsed Timer */}

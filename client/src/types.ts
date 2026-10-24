@@ -2,6 +2,25 @@ export type OrderStatus = 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMP
 
 export type OrderType = 'dine-in' | 'takeaway';
 
+export type FulfillmentType = 'ASAP' | 'SCHEDULED';
+
+export interface AdvanceOrderingConfig {
+  enabled: boolean;
+  leadTimeMinutes: number; // minimum lead time buffer in minutes, e.g. 20
+  slotIntervalMinutes: number; // duration of each pickup window in minutes, e.g. 15
+  maxDaysInAdvance: number; // maximum days ahead an order can be placed, e.g. 2
+  operatingHours: {
+    open: string; // "07:00"
+    close: string; // "21:00"
+  };
+}
+
+export interface PickupSlot {
+  time: string; // ISO string for slot start
+  label: string; // e.g. "2:30 PM - 2:45 PM"
+  isAvailable: boolean;
+}
+
 export interface LoyaltyProgramConfig {
   enabled: boolean;
   stampsTarget: number;
@@ -36,6 +55,7 @@ export interface Cafe {
   isOpen: boolean;
   pauseReason?: string;
   loyaltyProgram?: LoyaltyProgramConfig;
+  advanceOrdering?: AdvanceOrderingConfig;
 }
 
 export type SupportedLanguage = 'en' | 'es' | 'fr' | 'it';
@@ -116,6 +136,9 @@ export interface Order {
   taxRate?: number;
   taxName?: string;
   total: number;
+  fulfillmentType?: FulfillmentType; // CP-49: 'ASAP' | 'SCHEDULED'
+  scheduledPickupTime?: string;     // CP-49: ISO timestamp for advance pickup
+  pickupWindow?: string;            // CP-49: formatted window, e.g. "2:30 PM - 2:45 PM"
   estimatedPrepMinutes?: number; // Estimated prep time in minutes (CP-40)
   estimatedReadyAt?: string;     // ISO timestamp for projected completion (CP-40)
   feedback?: {

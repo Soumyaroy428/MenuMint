@@ -1,4 +1,4 @@
-import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, DietaryTag, OrderFeedback, PrepStation, AccountingReport, LoyaltyProgramConfig, InventorySummary } from './types';
+import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, DietaryTag, OrderFeedback, PrepStation, AccountingReport, LoyaltyProgramConfig, InventorySummary, AdvanceOrderingConfig, PickupSlot, FulfillmentType } from './types';
 import { BillSplitResult } from './utils/billSplitter';
 
 const API_BASE = '/api';
@@ -32,6 +32,9 @@ export async function submitOrder(orderData: {
   promoCode?: string;
   tip?: number;
   useLoyaltyReward?: boolean;
+  fulfillmentType?: FulfillmentType;
+  scheduledPickupTime?: string;
+  pickupWindow?: string;
   items: { menuItemId: string; quantity: number }[];
 }): Promise<{
   success: boolean;
@@ -580,6 +583,48 @@ export async function updateItemStock(
     throw new Error(data.message || 'Failed to update item stock');
   }
   return data.item;
+}
+
+// CP-49: Scheduled Advance Ordering & Pickup Slots Client Methods
+export async function fetchPickupSlots(
+  slug: string,
+  date?: string
+): Promise<{
+  enabled: boolean;
+  date: string;
+  leadTimeMinutes: number;
+  slotIntervalMinutes: number;
+  operatingHours: { open: string; close: string };
+  slots: PickupSlot[];
+}> {
+  const url = date
+    ? `${API_BASE}/cafes/${slug}/pickup-slots?date=${encodeURIComponent(date)}`
+    : `${API_BASE}/cafes/${slug}/pickup-slots`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to load pickup slots');
+  }
+  return res.json();
+}
+
+export async function updateAdvanceOrderingConfig(
+  token: string,
+  config: Partial<AdvanceOrderingConfig>
+): Promise<AdvanceOrderingConfig> {
+  const res = await fetch(`${API_BASE}/dashboard/cafe/advance-ordering`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(config),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Failed to update advance ordering configuration');
+  }
+  return data.config;
 }
 
 

@@ -1,4 +1,4 @@
-import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, OrderFeedback, PrepStation, AccountingReport, TaxBreakdownLine, LoyaltyProgramConfig, LoyaltyAccount, InventorySummary } from './types.js';
+import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, OrderFeedback, PrepStation, AccountingReport, TaxBreakdownLine, LoyaltyProgramConfig, LoyaltyAccount, InventorySummary, AdvanceOrderingConfig, PickupSlot } from './types.js';
 import bcrypt from 'bcryptjs';
 
 // Pre-seeded database in memory with consistent IDs and tenant isolation
@@ -22,6 +22,16 @@ class Database {
         rewardDiscountCents: 500, // $5.00
         rewardDescription: 'Free Coffee or Pastry (Up to $5.00)',
       },
+      advanceOrdering: {
+        enabled: true,
+        leadTimeMinutes: 20,
+        slotIntervalMinutes: 15,
+        maxDaysInAdvance: 2,
+        operatingHours: {
+          open: '07:00',
+          close: '21:00',
+        },
+      },
       createdAt: new Date().toISOString(),
     },
     {
@@ -41,6 +51,16 @@ class Database {
         stampsTarget: 6,
         rewardDiscountCents: 450, // €4.50
         rewardDescription: 'Free Italian Espresso or Gelato (Up to €4.50)',
+      },
+      advanceOrdering: {
+        enabled: true,
+        leadTimeMinutes: 30,
+        slotIntervalMinutes: 30,
+        maxDaysInAdvance: 1,
+        operatingHours: {
+          open: '09:00',
+          close: '22:00',
+        },
       },
       createdAt: new Date().toISOString(),
     },
@@ -1080,6 +1100,125 @@ class Database {
       depletedCount,
       items: trackedItems,
     };
+  }
+
+  getPickupSlots(
+    cafeId: string,
+    dateStr?: string
+  ): {
+    enabled: boolean;
+    date: string;
+    leadTimeMinutes: number;
+    slotIntervalMinutes: number;
+    operatingHours: { open: string; close: string };
+    slots: PickupSlot[];
+  } {
+    const cafe = this.getCafeById(cafeId);
+    const config = cafe?.advanceOrdering || {
+      enabled: false,
+      leadTimeMinutes: 20,
+      slotIntervalMinutes: 15,
+      maxDaysInAdvance: 2,
+      operatingHours: { open: '07:00', close: '21:00' },
+    };
+
+    const targetDate = dateStr ? new Date(`${dateStr}T00:00:00`) : new Date();
+    const dateFormatted = targetDate.toISOString().split('T')[0];
+
+    if (!config.enabled) {
+      return {
+        enabled: false,
+        date: dateFormatted,
+        leadTimeMinutes: config.leadTimeMinutes,
+        slotIntervalMinutes: config.slotIntervalMinutes,
+        operatingHours: config.operatingHours,
+        slots: [],
+      };
+    }
+
+    const [openH, openM] = config.operatingHours.open.split(':').map(Number);
+    const [closeH, closeM] = config.operatingHours.close.split(':').map(Number);
+
+    const now = new Date();
+    const leadBufferMs = (config.leadTimeMinutes || 20) * 60 * 1000;
+    const intervalMs = (config.slotIntervalMinutes || 15) * 60 * 1000;
+
+    const startTime = new Date(targetDate);
+    startTime.setHours(openH, openM, 0, 0);
+
+    const endTime = new Date(targetDate);
+    endTime.setHours(closeH, closeM, 0, 0);
+
+    const slots: PickupSlot[] = [];
+    let current = new Date(startTime);
+
+    const formatSlotTime = (d: Date) => {
+      let h = d.getHours();
+      const m = d.getMinutes();
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      h = h % 12;
+      h = h ? h : 12;
+      const mm = m < 10 ? `0${m}` : `${m}`;
+      return `${h}:${mm} ${ampm}`;
+    };
+
+    while (current.getTime() + intervalMs <= endTime.getTime()) {
+      const slotStart = new Date(current);
+      const slotEnd = new Date(current.getTime() + intervalMs);
+      const isAvailable = slotStart.getTime() >= now.getTime() + leadBufferMs;
+
+      slots.push({
+        time: slotStart.toISOString(),
+        label: `${formatSlotTime(slotStart)} - ${formatSlotTime(slotEnd)}`,
+        isAvailable,
+      });
+
+      current = new Date(current.getTime() + intervalMs);
+    }
+
+    return {
+      enabled: true,
+      date: dateFormatted,
+      leadTimeMinutes: config.leadTimeMinutes,
+      slotIntervalMinutes: config.slotIntervalMinutes,
+      operatingHours: config.operatingHours,
+      slots,
+    };
+  }
+
+  updateAdvanceOrderingConfig(
+    cafeId: string,
+    updates: Partial<AdvanceOrderingConfig>
+  ): AdvanceOrderingConfig | null {
+    const cafe = this.getCafeById(cafeId);
+    if (!cafe) return null;
+
+    if (!cafe.advanceOrdering) {
+      cafe.advanceOrdering = {
+        enabled: true,
+        leadTimeMinutes: 20,
+        slotIntervalMinutes: 15,
+        maxDaysInAdvance: 2,
+        operatingHours: { open: '07:00', close: '21:00' },
+      };
+    }
+
+    if (updates.enabled !== undefined) cafe.advanceOrdering.enabled = Boolean(updates.enabled);
+    if (updates.leadTimeMinutes !== undefined) {
+      cafe.advanceOrdering.leadTimeMinutes = Math.max(5, Number(updates.leadTimeMinutes) || 20);
+    }
+    if (updates.slotIntervalMinutes !== undefined) {
+      cafe.advanceOrdering.slotIntervalMinutes = Math.max(5, Number(updates.slotIntervalMinutes) || 15);
+    }
+    if (updates.maxDaysInAdvance !== undefined) {
+      cafe.advanceOrdering.maxDaysInAdvance = Math.max(1, Number(updates.maxDaysInAdvance) || 1);
+    }
+    if (updates.operatingHours) {
+      if (updates.operatingHours.open) cafe.advanceOrdering.operatingHours.open = updates.operatingHours.open;
+      if (updates.operatingHours.close) cafe.advanceOrdering.operatingHours.close = updates.operatingHours.close;
+    }
+
+    return cafe.advanceOrdering;
   }
 }
 

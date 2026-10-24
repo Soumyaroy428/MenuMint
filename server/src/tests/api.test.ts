@@ -1596,6 +1596,120 @@ describe('MenuMint API Test Suite', () => {
     const leakedItem = bvEsRes.body.items.find((i: any) => i.id === 'item-1');
     assert.strictEqual(leakedItem, undefined);
   });
+
+  test('CP-49: Scheduled Advance Ordering & Pickup Windows (Slot Generation, Advance Validation, Fulfillment Filtering & Tenant Isolation)', async () => {
+    // 1. Get available pickup slots for Daily Grind
+    const slotsRes = await request(app).get('/api/cafes/daily-grind/pickup-slots');
+    assert.strictEqual(slotsRes.status, 200);
+    assert.strictEqual(slotsRes.body.success, true);
+    assert.strictEqual(slotsRes.body.enabled, true);
+    assert.strictEqual(slotsRes.body.leadTimeMinutes, 20);
+    assert.strictEqual(slotsRes.body.slotIntervalMinutes, 15);
+    assert.ok(Array.isArray(slotsRes.body.slots));
+    assert.ok(slotsRes.body.slots.length > 0);
+
+    // 2. Schedule a valid advance order for tomorrow at 10:00 AM
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(10, 0, 0, 0);
+    const validFutureIso = tomorrow.toISOString();
+
+    const orderRes = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        customerName: 'Advance Alice',
+        customerPhone: '555-888-9999',
+        orderType: 'takeaway',
+        fulfillmentType: 'SCHEDULED',
+        scheduledPickupTime: validFutureIso,
+        pickupWindow: '10:00 AM - 10:15 AM',
+        items: [{ menuItemId: 'item-1', quantity: 1 }],
+      });
+
+    assert.strictEqual(orderRes.status, 201);
+    assert.strictEqual(orderRes.body.order.fulfillmentType, 'SCHEDULED');
+    assert.strictEqual(orderRes.body.order.scheduledPickupTime, validFutureIso);
+    assert.strictEqual(orderRes.body.order.pickupWindow, '10:00 AM - 10:15 AM');
+
+    // 3. Track order confirms scheduled properties
+    const trackRes = await request(app).get(`/api/orders/${orderRes.body.order.orderRef}`);
+    assert.strictEqual(trackRes.status, 200);
+    assert.strictEqual(trackRes.body.order.fulfillmentType, 'SCHEDULED');
+    assert.strictEqual(trackRes.body.order.pickupWindow, '10:00 AM - 10:15 AM');
+
+    // 4. Validation: Past or insufficient lead time (< 20 mins)
+    const tooSoon = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    const tooSoonRes = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        customerName: 'Rush Customer',
+        orderType: 'takeaway',
+        fulfillmentType: 'SCHEDULED',
+        scheduledPickupTime: tooSoon,
+        items: [{ menuItemId: 'item-1', quantity: 1 }],
+      });
+    assert.strictEqual(tooSoonRes.status, 400);
+    assert.strictEqual(tooSoonRes.body.error, 'Advance Lead Time Required');
+
+    // 5. Validation: Outside operating hours (e.g. 03:00 AM)
+    const earlyMorning = new Date();
+    earlyMorning.setDate(earlyMorning.getDate() + 1);
+    earlyMorning.setHours(3, 0, 0, 0);
+    const earlyRes = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        customerName: 'Night Owl',
+        orderType: 'takeaway',
+        fulfillmentType: 'SCHEDULED',
+        scheduledPickupTime: earlyMorning.toISOString(),
+        items: [{ menuItemId: 'item-1', quantity: 1 }],
+      });
+    assert.strictEqual(earlyRes.status, 400);
+    assert.strictEqual(earlyRes.body.error, 'Outside Operating Hours');
+
+    // 6. Dashboard: Update advance ordering settings
+    const patchRes = await request(app)
+      .patch('/api/dashboard/cafe/advance-ordering')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        leadTimeMinutes: 25,
+        slotIntervalMinutes: 20,
+        operatingHours: { open: '08:00', close: '20:00' },
+      });
+    assert.strictEqual(patchRes.status, 200);
+    assert.strictEqual(patchRes.body.config.leadTimeMinutes, 25);
+    assert.strictEqual(patchRes.body.config.slotIntervalMinutes, 20);
+    assert.strictEqual(patchRes.body.config.operatingHours.open, '08:00');
+
+    // Restore to default settings
+    await request(app)
+      .patch('/api/dashboard/cafe/advance-ordering')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        leadTimeMinutes: 20,
+        slotIntervalMinutes: 15,
+        operatingHours: { open: '07:00', close: '21:00' },
+      });
+
+    // 7. Dashboard Fulfillment Filter
+    const scheduledDashboard = await request(app)
+      .get('/api/dashboard/orders?fulfillment=scheduled')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    assert.strictEqual(scheduledDashboard.status, 200);
+    assert.ok(scheduledDashboard.body.orders.every((o: any) => o.fulfillmentType === 'SCHEDULED'));
+    assert.ok(scheduledDashboard.body.orders.some((o: any) => o.orderRef === orderRes.body.order.orderRef));
+
+    // 8. Multi-Tenant Isolation
+    // Cafe 2 (Bella Vista) has its own independent slots and settings (slotInterval 30m)
+    const bvSlots = await request(app).get('/api/cafes/bella-vista/pickup-slots');
+    assert.strictEqual(bvSlots.status, 200);
+    assert.strictEqual(bvSlots.body.leadTimeMinutes, 30);
+    assert.strictEqual(bvSlots.body.slotIntervalMinutes, 30);
+    assert.strictEqual(bvSlots.body.operatingHours.open, '09:00');
+  });
 });
 
 

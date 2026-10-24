@@ -70,6 +70,17 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
             </span>
           </div>
 
+          {order.pickupWindow && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.85rem' }}>
+              <span style={{ color: '#0369a1', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>
+                <Clock size={14} color="#0284c7" /> Pickup Window:
+              </span>
+              <span className="badge badge-info" style={{ fontWeight: 800 }}>
+                🕒 {order.pickupWindow}
+              </span>
+            </div>
+          )}
+
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
             <span style={{ color: '#64748b' }}>Customer:</span>
             <span style={{ fontWeight: 600 }}>{order.customerName}</span>

@@ -86,6 +86,12 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     'cart.submitting': 'Submitting Order...',
     'cart.split_bill': 'Split Bill Between Guests',
     'cart.remove': 'Remove',
+    'cart.asap': '⚡ ASAP (~15-20m)',
+    'cart.schedule_pickup': '🕒 Schedule Pickup',
+    'cart.pickup_window': 'Pickup Window',
+    'cart.select_slot': 'Select time window...',
+    'cart.scheduled_alert': 'Advance order scheduled for pickup',
+    'order.pickup_window': 'Scheduled Pickup Window',
 
     // Ready alert
     'alert.order_ready': 'Order Ready',
@@ -171,6 +177,12 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     'cart.submitting': 'Enviando Pedido...',
     'cart.split_bill': 'Dividir Cuenta entre Amigos',
     'cart.remove': 'Eliminar',
+    'cart.asap': '⚡ Lo antes posible (~15-20m)',
+    'cart.schedule_pickup': '🕒 Programar Recogida',
+    'cart.pickup_window': 'Horario de Recogida',
+    'cart.select_slot': 'Seleccionar horario...',
+    'cart.scheduled_alert': 'Pedido anticipado programado para recogida',
+    'order.pickup_window': 'Horario de Recogida Programado',
 
     // Ready alert
     'alert.order_ready': 'Pedido Listo',
@@ -256,6 +268,12 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     'cart.submitting': 'Transmission en cours...',
     'cart.split_bill': 'Partager l\'Addition',
     'cart.remove': 'Supprimer',
+    'cart.asap': '⚡ Dès que possible (~15-20m)',
+    'cart.schedule_pickup': '🕒 Retrait Programmé',
+    'cart.pickup_window': 'Créneau de Retrait',
+    'cart.select_slot': 'Choisir un créneau...',
+    'cart.scheduled_alert': 'Commande programmée pour retrait',
+    'order.pickup_window': 'Créneau de Retrait Programmé',
 
     // Ready alert
     'alert.order_ready': 'Commande Prête',
@@ -341,6 +359,12 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     'cart.submitting': 'Invio in corso...',
     'cart.split_bill': 'Dividi il Conto',
     'cart.remove': 'Rimuovi',
+    'cart.asap': '⚡ Subito (~15-20m)',
+    'cart.schedule_pickup': '🕒 Programma Ritiro',
+    'cart.pickup_window': 'Fascia Oraria Ritiro',
+    'cart.select_slot': 'Seleziona orario...',
+    'cart.scheduled_alert': 'Ordine programmato per il ritiro',
+    'order.pickup_window': 'Fascia Oraria di Ritiro',
 
     // Ready alert
     'alert.order_ready': 'Ordine Pronto',
@@ -391,3 +415,4 @@ export function t(
   }
   return text;
 }
+

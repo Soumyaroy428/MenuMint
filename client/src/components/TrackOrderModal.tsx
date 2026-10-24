@@ -181,6 +181,7 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
           <div class="row"><span>Customer:</span><strong>${order.customerName}</strong></div>
           <div class="row"><span>Fulfillment:</span><strong>${order.orderType} ${order.tableNumber ? `(${order.tableNumber})` : ''}</strong></div>
           <div class="row"><span>Status:</span><strong>${order.status}</strong></div>
+          ${order.pickupWindow ? `<div class="row" style="color: #0284c7; font-weight: bold;"><span>Pickup Window:</span><strong>${order.pickupWindow}</strong></div>` : ''}
           ${order.estimatedPrepMinutes ? `<div class="row"><span>Est. Prep Time:</span><strong>~${order.estimatedPrepMinutes} mins</strong></div>` : ''}
           <hr style="border: 0; border-top: 1px dashed #ccc; margin: 10px 0;" />
           ${order.items
@@ -381,6 +382,12 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
                 <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 2 }}>
                   {order.customerName} {order.tableNumber ? `• ${order.tableNumber}` : `• ${order.orderType}`}
                 </div>
+                {order.pickupWindow && (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4, background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: 6, fontSize: '0.75rem', fontWeight: 700 }}>
+                    <Clock size={12} />
+                    <span>Scheduled: {order.pickupWindow}</span>
+                  </div>
+                )}
               </div>
               <span className={`badge ${order.status === 'READY' || order.status === 'COMPLETED' ? 'badge-success' : 'badge-warning'}`}>
                 {order.status}

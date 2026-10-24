@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { CartItem, OrderType, Order, SupportedLanguage } from '../types';
-import { X, Trash2, Plus, Minus, ShoppingBag, Info, AlertTriangle, ArrowRight, Tag, Heart, Users, Gift } from 'lucide-react';
-import { submitOrder, validatePromoCode, fetchCafeLoyalty } from '../api';
+import { CartItem, OrderType, Order, SupportedLanguage, FulfillmentType, PickupSlot } from '../types';
+import { X, Trash2, Plus, Minus, ShoppingBag, Info, AlertTriangle, ArrowRight, Tag, Heart, Users, Gift, Clock } from 'lucide-react';
+import { submitOrder, validatePromoCode, fetchCafeLoyalty, fetchPickupSlots } from '../api';
 import { BillSplitModal } from './BillSplitModal';
 import { LoyaltyCardModal } from './LoyaltyCardModal';
 import { t } from '../utils/i18n';
@@ -75,9 +75,37 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   } | null>(null);
   const [isLoyaltyModalOpen, setIsLoyaltyModalOpen] = useState<boolean>(false);
 
+  // Advance Scheduled Ordering State (CP-49)
+  const [fulfillmentType, setFulfillmentType] = useState<FulfillmentType>('ASAP');
+  const [pickupSlots, setPickupSlots] = useState<PickupSlot[]>([]);
+  const [selectedSlotTime, setSelectedSlotTime] = useState<string>('');
+  const [loadingSlots, setLoadingSlots] = useState<boolean>(false);
+  const [slotsError, setSlotsError] = useState<string | null>(null);
+
   const getItemName = (item: CartItem['item']) => {
     return (currentLanguage !== 'en' && item.translations && item.translations[currentLanguage]?.name) || item.name;
   };
+
+  useEffect(() => {
+    if (isOpen && orderType === 'takeaway' && fulfillmentType === 'SCHEDULED') {
+      setLoadingSlots(true);
+      setSlotsError(null);
+      fetchPickupSlots(cafeSlug)
+        .then((data) => {
+          const available = data.slots.filter((s) => s.isAvailable);
+          setPickupSlots(available);
+          if (available.length > 0 && (!selectedSlotTime || !available.some((s) => s.time === selectedSlotTime))) {
+            setSelectedSlotTime(available[0].time);
+          }
+        })
+        .catch((err) => {
+          setSlotsError(err.message || 'Failed to load pickup windows');
+        })
+        .finally(() => {
+          setLoadingSlots(false);
+        });
+    }
+  }, [isOpen, orderType, fulfillmentType, cafeSlug]);
 
   useEffect(() => {
     const clean = customerPhone.replace(/\D/g, '');
@@ -176,6 +204,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       return;
     }
 
+    if (orderType === 'takeaway' && fulfillmentType === 'SCHEDULED' && !selectedSlotTime) {
+      setErrorMessage('Please select an advance pickup window for your order.');
+      return;
+    }
+
+    const selectedSlot = pickupSlots.find((s) => s.time === selectedSlotTime);
+
     setSubmitting(true);
     try {
       const payload = {
@@ -188,6 +223,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         promoCode: appliedPromo ? appliedPromo.code : undefined,
         tip: tipAmount > 0 ? tipAmount : undefined,
         useLoyaltyReward: useLoyaltyReward && loyaltyDiscountAmount > 0,
+        fulfillmentType: orderType === 'takeaway' ? fulfillmentType : 'ASAP',
+        scheduledPickupTime: orderType === 'takeaway' && fulfillmentType === 'SCHEDULED' ? selectedSlotTime : undefined,
+        pickupWindow: orderType === 'takeaway' && fulfillmentType === 'SCHEDULED' ? selectedSlot?.label : undefined,
         items: items.map((ci) => ({
           menuItemId: ci.item.id,
           quantity: ci.quantity,
@@ -318,6 +356,64 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 🥡 {t('cart.takeaway', currentLanguage)}
               </button>
             </div>
+
+            {/* Takeaway Advance Scheduled Pickup Selector (CP-49) */}
+            {orderType === 'takeaway' && (
+              <div style={{ marginBottom: '0.75rem', background: '#f8fafc', padding: '0.6rem 0.75rem', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', gap: '0.35rem', marginBottom: fulfillmentType === 'SCHEDULED' ? '0.5rem' : 0 }}>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${fulfillmentType === 'ASAP' ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ flex: 1, fontSize: '0.75rem', padding: '0.35rem 0', justifyContent: 'center' }}
+                    onClick={() => setFulfillmentType('ASAP')}
+                  >
+                    {t('cart.asap', currentLanguage)}
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${fulfillmentType === 'SCHEDULED' ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ flex: 1, fontSize: '0.75rem', padding: '0.35rem 0', justifyContent: 'center' }}
+                    onClick={() => setFulfillmentType('SCHEDULED')}
+                  >
+                    {t('cart.schedule_pickup', currentLanguage)}
+                  </button>
+                </div>
+
+                {fulfillmentType === 'SCHEDULED' && (
+                  <div>
+                    <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Clock size={13} color="#0284c7" />
+                      <span>{t('cart.pickup_window', currentLanguage)}</span>
+                    </label>
+
+                    {loadingSlots ? (
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', padding: '0.3rem 0' }}>
+                        Loading available windows...
+                      </div>
+                    ) : slotsError ? (
+                      <div style={{ fontSize: '0.75rem', color: '#ef4444' }}>{slotsError}</div>
+                    ) : pickupSlots.length === 0 ? (
+                      <div style={{ fontSize: '0.75rem', color: '#b45309', background: '#fffbeb', padding: '0.4rem', borderRadius: 6 }}>
+                        ⚠️ No more pickup windows available for today. Please choose ASAP or check back tomorrow!
+                      </div>
+                    ) : (
+                      <select
+                        className="form-input"
+                        style={{ height: 34, fontSize: '0.8rem', paddingTop: 4, paddingBottom: 4 }}
+                        value={selectedSlotTime}
+                        onChange={(e) => setSelectedSlotTime(e.target.value)}
+                      >
+                        {pickupSlots.map((slot) => (
+                          <option key={slot.time} value={slot.time}>
+                            Today: {slot.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: orderType === 'dine-in' ? '1fr 1fr' : '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
               <div className="form-group" style={{ marginBottom: '0.5rem' }}>
