@@ -144,3 +144,4 @@ npm start
 If YouPI-PG must be disabled:
 1. In café payment settings, toggle `paymentConfig.enabled = false` or switch the primary method to `CASH` / `CARD`.
 2. Existing orders remain accessible; counter staff can settle any pending orders via Cash/Card settlement in the Staff Dashboard.
+
