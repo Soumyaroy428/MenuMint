@@ -300,12 +300,12 @@ export const MenuPage: React.FC<MenuPageProps> = ({
         </div>
 
         {/* Dietary Filters Bar (CP-36) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', marginRight: '0.2rem' }}>{t('menu.dietary', currentLanguage)}</span>
+        <div className="dietary-bar">
+          <span className="dietary-label">{t('menu.dietary', currentLanguage)}</span>
           <button
             type="button"
             className={`btn btn-sm ${selectedDietaryFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ fontSize: '0.75rem', padding: '0.25rem 0.65rem', borderRadius: 20 }}
+            style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem', borderRadius: 20, flexShrink: 0, whiteSpace: 'nowrap' }}
             onClick={() => setSelectedDietaryFilter('all')}
           >
             {t('menu.all', currentLanguage)}
@@ -320,13 +320,15 @@ export const MenuPage: React.FC<MenuPageProps> = ({
                 className="btn btn-sm"
                 style={{
                   fontSize: '0.75rem',
-                  padding: '0.25rem 0.65rem',
+                  padding: '0.3rem 0.75rem',
                   borderRadius: 20,
                   background: isSelected ? config.bg : '#ffffff',
                   color: isSelected ? config.color : '#475569',
                   border: `1px solid ${isSelected ? config.border : '#e2e8f0'}`,
                   fontWeight: isSelected ? 700 : 500,
                   transition: 'all 0.15s ease',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
                 }}
                 onClick={() => setSelectedDietaryFilter(isSelected ? 'all' : tag)}
               >

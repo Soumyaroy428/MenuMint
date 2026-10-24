@@ -12,8 +12,8 @@ import { OrderHistoryModal } from './components/OrderHistoryModal';
 import { LoyaltyCardModal } from './components/LoyaltyCardModal';
 import { saveOrderToHistory, getCustomerOrderHistory } from './utils/orderHistory';
 import { playOrderReadyChime, flashTabTitle, sendBrowserNotification } from './utils/notifications';
-import { getStoredLanguage, setStoredLanguage } from './utils/i18n';
-import { ShoppingBag, ArrowRight } from 'lucide-react';
+import { getStoredLanguage, setStoredLanguage, t } from './utils/i18n';
+import { ShoppingBag, ArrowRight, Coffee, Search, Award, History } from 'lucide-react';
 
 export function App() {
   const [currentTab, setCurrentTab] = useState<'menu' | 'dashboard'>('menu');
@@ -341,6 +341,71 @@ export function App() {
           </div>
         </aside>
       )}
+
+      {/* Mobile Bottom Navigation Bar (< 768px) */}
+      <nav className="mobile-bottom-bar" aria-label="Mobile Navigation">
+        <button
+          className={`mobile-tab-btn ${currentTab === 'menu' ? 'active' : ''}`}
+          onClick={() => setCurrentTab('menu')}
+          aria-label={t('nav.digital_menu', currentLanguage)}
+        >
+          <Coffee size={20} />
+          <span>{t('nav.digital_menu', currentLanguage)}</span>
+        </button>
+
+        <button
+          className="mobile-tab-btn"
+          onClick={() => {
+            setTrackingOrderRef('');
+            setIsTrackModalOpen(true);
+          }}
+          aria-label={t('nav.track_order', currentLanguage)}
+        >
+          <Search size={20} />
+          <span>{t('nav.track_order', currentLanguage)}</span>
+        </button>
+
+        {cafe?.loyaltyProgram?.enabled && (
+          <button
+            className="mobile-tab-btn"
+            onClick={() => setIsLoyaltyModalOpen(true)}
+            aria-label={t('nav.stamp_card', currentLanguage)}
+          >
+            <Award size={20} color="#d97706" />
+            <span>{t('nav.stamp_card', currentLanguage)}</span>
+          </button>
+        )}
+
+        {historyCount > 0 && (
+          <button
+            className="mobile-tab-btn"
+            onClick={() => setIsHistoryModalOpen(true)}
+            aria-label={t('nav.past_orders', currentLanguage)}
+          >
+            <div style={{ position: 'relative' }}>
+              <History size={20} />
+              <span className="mobile-badge-dot">{historyCount}</span>
+            </div>
+            <span>{t('nav.past_orders', currentLanguage)}</span>
+          </button>
+        )}
+
+        {currentTab === 'menu' && (
+          <button
+            className="mobile-tab-btn"
+            onClick={() => setIsCartOpen(true)}
+            aria-label={t('nav.cart', currentLanguage)}
+          >
+            <div style={{ position: 'relative' }}>
+              <ShoppingBag size={20} />
+              {totalCartCount > 0 && (
+                <span className="mobile-badge-dot">{totalCartCount}</span>
+              )}
+            </div>
+            <span>{t('nav.cart', currentLanguage)}</span>
+          </button>
+        )}
+      </nav>
 
       {/* Cart Drawer */}
       <CartDrawer
