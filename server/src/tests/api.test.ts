@@ -1536,6 +1536,66 @@ describe('MenuMint API Test Suite', () => {
       .send({ restockDelta: 20 });
     assert.strictEqual(crossTenantRestock.status, 404);
   });
+
+  test('CP-48: Multi-Language Menu Localization (English, Spanish, French, Italian & Fallback Engine)', async () => {
+    // 1. Default English menu
+    const enRes = await request(app).get('/api/cafes/daily-grind/menu');
+    assert.strictEqual(enRes.status, 200);
+    const cat1En = enRes.body.categories.find((c: any) => c.id === 'cat-1');
+    const item1En = enRes.body.items.find((i: any) => i.id === 'item-1');
+    assert.strictEqual(cat1En.name, 'Signature Coffee');
+    assert.strictEqual(item1En.name, 'Velvet Flat White');
+    assert.ok(item1En.description.includes('silky microfoam'));
+
+    // 2. Spanish localization (?lang=es)
+    const esRes = await request(app).get('/api/cafes/daily-grind/menu?lang=es');
+    assert.strictEqual(esRes.status, 200);
+    const cat1Es = esRes.body.categories.find((c: any) => c.id === 'cat-1');
+    const item1Es = esRes.body.items.find((i: any) => i.id === 'item-1');
+    assert.strictEqual(cat1Es.name, 'Café Artesanal');
+    assert.strictEqual(item1Es.name, 'Flat White de Terciopelo');
+    assert.strictEqual(item1Es.description, 'Doble ristretto espresso con leche cremosa al vapor.');
+
+    // 3. French localization (?lang=fr)
+    const frRes = await request(app).get('/api/cafes/daily-grind/menu?lang=fr');
+    assert.strictEqual(frRes.status, 200);
+    const cat1Fr = frRes.body.categories.find((c: any) => c.id === 'cat-1');
+    const item1Fr = frRes.body.items.find((i: any) => i.id === 'item-1');
+    assert.strictEqual(cat1Fr.name, 'Cafés d’Artisan');
+    assert.strictEqual(item1Fr.name, 'Flat White Velouté');
+    assert.strictEqual(item1Fr.description, 'Double ristretto avec lait entier texturé et micro-mousse.');
+
+    // 4. Italian localization (?lang=it)
+    const itRes = await request(app).get('/api/cafes/daily-grind/menu?lang=it');
+    assert.strictEqual(itRes.status, 200);
+    const cat1It = itRes.body.categories.find((c: any) => c.id === 'cat-1');
+    const item1It = itRes.body.items.find((i: any) => i.id === 'item-1');
+    assert.strictEqual(cat1It.name, 'Caffè Artigianale');
+    assert.strictEqual(item1It.name, 'Flat White Vellutato');
+    assert.strictEqual(item1It.description, 'Doppio ristretto espresso con crema di latte setosa.');
+
+    // 5. Automatic Fallback Behavior:
+    // If an item lacks a translation for the selected language, or unknown lang code, fallback to English
+    const fallbackRes = await request(app).get('/api/cafes/daily-grind/menu?lang=de');
+    assert.strictEqual(fallbackRes.status, 200);
+    const cat1Fallback = fallbackRes.body.categories.find((c: any) => c.id === 'cat-1');
+    const item1Fallback = fallbackRes.body.items.find((i: any) => i.id === 'item-1');
+    assert.strictEqual(cat1Fallback.name, 'Signature Coffee');
+    assert.strictEqual(item1Fallback.name, 'Velvet Flat White');
+
+    // 6. Multi-Tenant Isolation
+    // Multilingual queries on Bella Vista should localize Bella Vista's own Italian & Spanish items
+    const bvEsRes = await request(app).get('/api/cafes/bella-vista/menu?lang=es');
+    assert.strictEqual(bvEsRes.status, 200);
+    const bvCatEs = bvEsRes.body.categories.find((c: any) => c.id === 'cat-201');
+    const bvItemEs = bvEsRes.body.items.find((i: any) => i.id === 'item-201');
+    assert.strictEqual(bvCatEs.name, 'Espresso Italiano');
+    assert.strictEqual(bvItemEs.name, 'Café Espresso Ristretto Doble');
+
+    // Bella Vista menu must NOT contain Daily Grind items
+    const leakedItem = bvEsRes.body.items.find((i: any) => i.id === 'item-1');
+    assert.strictEqual(leakedItem, undefined);
+  });
 });
 
 

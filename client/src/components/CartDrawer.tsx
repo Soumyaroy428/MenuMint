@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { CartItem, OrderType, Order } from '../types';
+import { CartItem, OrderType, Order, SupportedLanguage } from '../types';
 import { X, Trash2, Plus, Minus, ShoppingBag, Info, AlertTriangle, ArrowRight, Tag, Heart, Users, Gift } from 'lucide-react';
 import { submitOrder, validatePromoCode, fetchCafeLoyalty } from '../api';
 import { BillSplitModal } from './BillSplitModal';
 import { LoyaltyCardModal } from './LoyaltyCardModal';
+import { t } from '../utils/i18n';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -20,6 +21,7 @@ interface CartDrawerProps {
   isStoreOpen?: boolean;
   storePauseReason?: string;
   onOrderSuccess: (order: Order) => void;
+  currentLanguage?: SupportedLanguage;
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
@@ -37,6 +39,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   isStoreOpen = true,
   storePauseReason,
   onOrderSuccess,
+  currentLanguage = 'en',
 }) => {
   const [orderType, setOrderType] = useState<OrderType>('dine-in');
   const [customerName, setCustomerName] = useState('');
@@ -72,6 +75,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   } | null>(null);
   const [isLoyaltyModalOpen, setIsLoyaltyModalOpen] = useState<boolean>(false);
 
+  const getItemName = (item: CartItem['item']) => {
+    return (currentLanguage !== 'en' && item.translations && item.translations[currentLanguage]?.name) || item.name;
+  };
+
   useEffect(() => {
     const clean = customerPhone.replace(/\D/g, '');
     if (clean.length >= 7) {
@@ -104,7 +111,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const totalDiscount = discountAmount + loyaltyDiscountAmount;
   const subtotal = Math.max(0, rawSubtotal - totalDiscount);
   const effectiveTaxRate = typeof taxRate === 'number' ? taxRate : 8.25;
-  const effectiveTaxName = taxName || 'Estimated Tax';
+  const effectiveTaxName = taxName || t('cart.tax', currentLanguage);
   const estimatedTax = Math.round((subtotal * effectiveTaxRate) / 100);
 
   let tipAmount = 0;
@@ -205,8 +212,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         <div className="cart-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <ShoppingBag size={20} color="#059669" />
-            <h2 style={{ fontSize: '1.15rem', fontWeight: 700 }}>Your Order Cart</h2>
-            <span className="badge badge-neutral">{items.reduce((sum, i) => sum + i.quantity, 0)} items</span>
+            <h2 style={{ fontSize: '1.15rem', fontWeight: 700 }}>{t('cart.title', currentLanguage)}</h2>
+            <span className="badge badge-neutral">{items.reduce((sum, i) => sum + i.quantity, 0)} {t('nav.cart', currentLanguage)}</span>
           </div>
           <button onClick={onClose} aria-label="Close cart" style={{ color: '#64748b' }}>
             <X size={22} />
@@ -231,15 +238,15 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         {items.length === 0 ? (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#64748b', padding: '2rem' }}>
             <ShoppingBag size={48} strokeWidth={1.5} color="#cbd5e1" style={{ marginBottom: '1rem' }} />
-            <p style={{ fontWeight: 600, fontSize: '1rem' }}>Your cart is empty</p>
-            <p style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>Add delicious coffees and pastries to get started.</p>
+            <p style={{ fontWeight: 600, fontSize: '1rem' }}>{t('cart.empty_title', currentLanguage)}</p>
+            <p style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>{t('cart.empty_desc', currentLanguage)}</p>
           </div>
         ) : (
           <div className="cart-items-list">
             {items.map((cartItem) => (
               <div key={cartItem.item.id} className="cart-item-row">
                 <div style={{ flex: 1, paddingRight: '0.75rem' }}>
-                  <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{cartItem.item.name}</div>
+                  <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{getItemName(cartItem.item)}</div>
                   <div style={{ color: '#64748b', fontSize: '0.85rem' }}>
                     {currencySymbol}{(cartItem.item.price / 100).toFixed(2)} each
                   </div>
@@ -283,7 +290,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     onClick={() => onRemoveItem(cartItem.item.id)}
                     style={{ color: '#ef4444', fontSize: '0.75rem', marginTop: 2, display: 'inline-flex', alignItems: 'center', gap: 2 }}
                   >
-                    <Trash2 size={12} /> Remove
+                    <Trash2 size={12} /> {t('cart.remove', currentLanguage)}
                   </button>
                 </div>
               </div>
@@ -301,20 +308,20 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 className={`btn btn-sm ${orderType === 'dine-in' ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => setOrderType('dine-in')}
               >
-                🍽️ Dine-in
+                🍽️ {t('cart.dine_in', currentLanguage)}
               </button>
               <button
                 type="button"
                 className={`btn btn-sm ${orderType === 'takeaway' ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => setOrderType('takeaway')}
               >
-                🥡 Takeaway
+                🥡 {t('cart.takeaway', currentLanguage)}
               </button>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: orderType === 'dine-in' ? '1fr 1fr' : '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
               <div className="form-group" style={{ marginBottom: '0.5rem' }}>
-                <label className="form-label">Your Name *</label>
+                <label className="form-label">{t('cart.customer_name', currentLanguage)}</label>
                 <input
                   type="text"
                   required
@@ -327,7 +334,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
               {orderType === 'dine-in' && (
                 <div className="form-group" style={{ marginBottom: '0.5rem' }}>
-                  <label className="form-label">Table Number</label>
+                  <label className="form-label">{t('cart.table_number', currentLanguage)}</label>
                   <input
                     type="text"
                     placeholder="e.g. Table 4"
@@ -340,7 +347,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
               <div className="form-group" style={{ marginBottom: '0.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label className="form-label">Phone (for Stamp Card & Alerts)</label>
+                  <label className="form-label">{t('cart.phone_label', currentLanguage)}</label>
                   {loyaltyData?.account && (
                     <button
                       type="button"
@@ -400,7 +407,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             <div className="form-group" style={{ marginBottom: '0.75rem' }}>
               <input
                 type="text"
-                placeholder="Kitchen notes (e.g. oat milk, extra hot, no cinnamon)"
+                placeholder={t('cart.notes_placeholder', currentLanguage)}
                 className="form-input"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
@@ -434,7 +441,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       <Tag size={13} color="#94a3b8" style={{ position: 'absolute', left: 8, top: 10 }} />
                       <input
                         type="text"
-                        placeholder="Promo code (e.g. MINT10)"
+                        placeholder={t('cart.promo_code', currentLanguage)}
                         className="form-input"
                         style={{ paddingLeft: '1.8rem', height: 32, fontSize: '0.8rem', textTransform: 'uppercase' }}
                         value={promoInput}
@@ -448,7 +455,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       disabled={promoValidating || !promoInput.trim()}
                       onClick={handleApplyPromo}
                     >
-                      {promoValidating ? 'Checking...' : 'Apply'}
+                      {promoValidating ? 'Checking...' : t('cart.apply_code', currentLanguage)}
                     </button>
                   </div>
                   {promoError && (
@@ -465,7 +472,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
                   <Heart size={14} color="#ec4899" fill="#fbcfe8" />
-                  <span>Tip Barista & Kitchen Staff</span>
+                  <span>{t('cart.add_tip', currentLanguage)}</span>
                 </div>
                 {tipAmount > 0 && (
                   <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#059669' }}>
@@ -507,7 +514,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     step="0.50"
                     min="0.50"
                     max="500.00"
-                    placeholder="Custom tip (e.g. 3.00)"
+                    placeholder={t('cart.tip_custom', currentLanguage)}
                     className="form-input"
                     style={{ height: 32, fontSize: '0.8rem' }}
                     value={customTipInput}
@@ -520,18 +527,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             {/* Price Breakdown */}
             <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '0.75rem', marginBottom: '0.75rem', fontSize: '0.85rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', marginBottom: 2 }}>
-                <span>Subtotal</span>
+                <span>{t('cart.subtotal', currentLanguage)}</span>
                 <span>{currencySymbol}{(rawSubtotal / 100).toFixed(2)}</span>
               </div>
               {discountAmount > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', color: '#059669', fontWeight: 600, marginBottom: 2 }}>
-                  <span>Discount ({appliedPromo?.code})</span>
+                  <span>{t('cart.discount', currentLanguage)} ({appliedPromo?.code})</span>
                   <span>- {currencySymbol}{(discountAmount / 100).toFixed(2)}</span>
                 </div>
               )}
               {loyaltyDiscountAmount > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', color: '#b45309', fontWeight: 700, marginBottom: 2 }}>
-                  <span>🎁 Loyalty Reward Voucher</span>
+                  <span>🎁 {t('cart.loyalty_reward', currentLanguage)}</span>
                   <span>- {currencySymbol}{(loyaltyDiscountAmount / 100).toFixed(2)}</span>
                 </div>
               )}
@@ -541,12 +548,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               </div>
               {tipAmount > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', color: '#059669', fontWeight: 600, marginBottom: 4 }}>
-                  <span>Staff Tip</span>
+                  <span>{t('cart.tip', currentLanguage)}</span>
                   <span>+{currencySymbol}{(tipAmount / 100).toFixed(2)}</span>
                 </div>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '1.05rem', color: '#0f172a' }}>
-                <span>Total Due</span>
+                <span>{t('cart.total', currentLanguage)}</span>
                 <span>{currencySymbol}{(total / 100).toFixed(2)}</span>
               </div>
 
@@ -570,7 +577,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     title="Calculate per-guest split shares for this table (CP-44)"
                   >
                     <Users size={13} />
-                    <span>Split Table Bill</span>
+                    <span>{t('cart.split_bill', currentLanguage)}</span>
                   </button>
                 </div>
               )}
@@ -613,10 +620,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               {!isStoreOpen ? (
                 'Store Ordering Paused'
               ) : submitting ? (
-                'Transmitting Order to Kitchen...'
+                t('cart.submitting', currentLanguage)
               ) : (
                 <>
-                  <span>Send Order to Café</span>
+                  <span>{t('cart.place_order', currentLanguage)}</span>
                   <ArrowRight size={18} />
                 </>
               )}

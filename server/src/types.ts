@@ -39,12 +39,15 @@ export interface Cafe {
   createdAt: string;
 }
 
+export type SupportedLanguage = 'en' | 'es' | 'fr' | 'it';
+
 export interface MenuCategory {
   id: string;
   cafeId: string;
   name: string;
   sortOrder: number;
   active: boolean;
+  translations?: Partial<Record<SupportedLanguage, string>>;
 }
 
 export type DietaryTag = 'VEGAN' | 'VEGETARIAN' | 'GLUTEN_FREE' | 'NUT_FREE' | 'SPICY' | 'CHEF_SPECIAL';
@@ -66,6 +69,7 @@ export interface MenuItem {
   inventoryCount?: number; // Current stock on hand
   lowStockThreshold?: number; // Threshold to trigger low-stock warning (e.g. <= 3)
   auto86Enabled?: boolean; // Automatically 86 (set isAvailable: false) when stock reaches 0
+  translations?: Partial<Record<SupportedLanguage, { name: string; description?: string }>>; // CP-48: Multilingual Localization
   createdAt: string;
 }
 

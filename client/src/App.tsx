@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Cafe, MenuCategory, MenuItem, CartItem, Order } from './types';
+import { Cafe, MenuCategory, MenuItem, CartItem, Order, SupportedLanguage } from './types';
 import { fetchMenu, fetchCafes, trackOrder } from './api';
 import { Navbar } from './components/Navbar';
 import { MenuPage } from './components/MenuPage';
@@ -12,6 +12,7 @@ import { OrderHistoryModal } from './components/OrderHistoryModal';
 import { LoyaltyCardModal } from './components/LoyaltyCardModal';
 import { saveOrderToHistory, getCustomerOrderHistory } from './utils/orderHistory';
 import { playOrderReadyChime, flashTabTitle, sendBrowserNotification } from './utils/notifications';
+import { getStoredLanguage, setStoredLanguage } from './utils/i18n';
 import { ShoppingBag, ArrowRight } from 'lucide-react';
 
 export function App() {
@@ -40,6 +41,14 @@ export function App() {
   const [items, setItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Language localization state (CP-48)
+  const [currentLanguage, setCurrentLanguage] = useState<SupportedLanguage>(() => getStoredLanguage());
+
+  const handleLanguageChange = (lang: SupportedLanguage) => {
+    setCurrentLanguage(lang);
+    setStoredLanguage(lang);
+  };
 
   // Cart & Modal states
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -96,8 +105,8 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    loadMenu();
-  }, [cafeSlug]);
+    loadMenu(currentLanguage);
+  }, [cafeSlug, currentLanguage]);
 
   const handleSelectCafe = (slug: string) => {
     if (slug === cafeSlug) return;
@@ -110,11 +119,11 @@ export function App() {
     }
   };
 
-  const loadMenu = async () => {
+  const loadMenu = async (lang: SupportedLanguage = currentLanguage) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchMenu(cafeSlug);
+      const data = await fetchMenu(cafeSlug, lang);
       setCafe(data.cafe);
       setCategories(data.categories);
       setItems(data.items);
@@ -259,6 +268,8 @@ export function App() {
         availableCafes={availableCafes}
         activeCafeSlug={cafeSlug}
         onSelectCafe={handleSelectCafe}
+        currentLanguage={currentLanguage}
+        onLanguageChange={handleLanguageChange}
       />
 
       <main style={{ flex: 1 }}>
@@ -275,6 +286,7 @@ export function App() {
             openOrderHistoryModal={() => setIsHistoryModalOpen(true)}
             openLoyaltyModal={() => setIsLoyaltyModalOpen(true)}
             pastOrderCount={historyCount}
+            currentLanguage={currentLanguage}
           />
         ) : (
           <DashboardPage
@@ -345,6 +357,7 @@ export function App() {
         taxName={cafe?.taxName}
         isStoreOpen={cafe?.isOpen ?? true}
         storePauseReason={cafe?.pauseReason}
+        currentLanguage={currentLanguage}
         onOrderSuccess={(order) => {
           saveOrderToHistory(order, cafeSlug, cafe?.name || 'MenuMint Café');
           setConfirmedOrder(order);

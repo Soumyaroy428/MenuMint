@@ -1,6 +1,8 @@
 import React from 'react';
 import { Coffee, ShoppingBag, Search, LayoutDashboard, QrCode, Store, History, Award } from 'lucide-react';
-import { Cafe } from '../types';
+import { Cafe, SupportedLanguage } from '../types';
+import { LanguageSwitcher } from './LanguageSwitcher';
+import { t } from '../utils/i18n';
 
 interface NavbarProps {
   currentTab: 'menu' | 'dashboard';
@@ -16,6 +18,8 @@ interface NavbarProps {
   availableCafes?: Cafe[];
   activeCafeSlug?: string;
   onSelectCafe?: (slug: string) => void;
+  currentLanguage?: SupportedLanguage;
+  onLanguageChange?: (lang: SupportedLanguage) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -32,6 +36,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   availableCafes = [],
   activeCafeSlug = 'daily-grind',
   onSelectCafe,
+  currentLanguage = 'en',
+  onLanguageChange,
 }) => {
   return (
     <header className="navbar">
@@ -45,18 +51,26 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', lineHeight: 1.15 }}>
             <span style={{ fontSize: '1.05rem', fontWeight: 800 }}>{cafeName}</span>
             <span style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 700, letterSpacing: '0.04em' }}>
-              POWERED BY MENUMINT
+              {t('nav.powered_by', currentLanguage)}
             </span>
           </div>
         </button>
 
         <nav className="nav-links">
+          {/* Language Switcher (CP-48) */}
+          {onLanguageChange && (
+            <LanguageSwitcher
+              currentLanguage={currentLanguage}
+              onLanguageChange={onLanguageChange}
+            />
+          )}
+
           {/* Quick Café Switcher Dropdown */}
           {availableCafes.length > 1 && currentTab === 'menu' && onSelectCafe && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
               <Store size={14} color="#059669" />
               <select
-                aria-label="Switch Café"
+                aria-label={t('nav.switch_cafe', currentLanguage)}
                 value={activeCafeSlug}
                 onChange={(e) => onSelectCafe(e.target.value)}
                 style={{
@@ -84,30 +98,30 @@ export const Navbar: React.FC<NavbarProps> = ({
             className={`nav-link ${currentTab === 'menu' ? 'active' : ''}`}
             onClick={() => setCurrentTab('menu')}
           >
-            Digital Menu
+            {t('nav.digital_menu', currentLanguage)}
           </button>
 
           <button className="nav-link" onClick={openQRModal} title="Table QR Codes">
             <QrCode size={16} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
-            Table QR
+            {t('nav.table_qr', currentLanguage)}
           </button>
 
           <button className="nav-link" onClick={openTrackModal} title="Check Order Status">
             <Search size={16} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
-            Track Order
+            {t('nav.track_order', currentLanguage)}
           </button>
 
           {openOrderHistoryModal && (
             <button className="nav-link" onClick={openOrderHistoryModal} title="View Past Orders & Reorder">
               <History size={16} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
-              Past Orders {pastOrderCount > 0 ? `(${pastOrderCount})` : ''}
+              {t('nav.past_orders', currentLanguage)} {pastOrderCount > 0 ? `(${pastOrderCount})` : ''}
             </button>
           )}
 
           {openLoyaltyModal && (
             <button className="nav-link" onClick={openLoyaltyModal} title="Digital Stamp Card & Rewards (CP-46)">
               <Award size={16} color="#d97706" style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
-              Stamp Card
+              {t('nav.stamp_card', currentLanguage)}
             </button>
           )}
 
@@ -116,13 +130,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => setCurrentTab('dashboard')}
           >
             <LayoutDashboard size={16} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
-            Owner Portal
+            {t('nav.owner_portal', currentLanguage)}
           </button>
 
           {currentTab === 'menu' && (
             <button className="btn btn-primary btn-sm" onClick={openCart} aria-label="View Cart">
               <ShoppingBag size={18} />
-              <span>Cart</span>
+              <span>{t('nav.cart', currentLanguage)}</span>
               {cartItemCount > 0 && (
                 <span
                   style={{

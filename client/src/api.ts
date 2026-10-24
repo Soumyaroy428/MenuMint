@@ -12,8 +12,9 @@ export async function fetchCafes(): Promise<Cafe[]> {
   return data.cafes;
 }
 
-export async function fetchMenu(slug: string): Promise<{ cafe: Cafe; categories: MenuCategory[]; items: MenuItem[] }> {
-  const res = await fetch(`${API_BASE}/cafes/${slug}/menu`);
+export async function fetchMenu(slug: string, lang?: string): Promise<{ cafe: Cafe; categories: MenuCategory[]; items: MenuItem[] }> {
+  const url = lang ? `${API_BASE}/cafes/${slug}/menu?lang=${encodeURIComponent(lang)}` : `${API_BASE}/cafes/${slug}/menu`;
+  const res = await fetch(url);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.message || `Failed to load menu for "${slug}"`);

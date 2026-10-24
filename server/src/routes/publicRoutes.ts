@@ -66,8 +66,27 @@ publicRouter.get('/cafes/:slug/menu', (req: Request, res: Response): void => {
     return;
   }
 
-  const categories = db.getCategoriesByCafeId(cafe.id);
-  const items = db.getItemsByCafeId(cafe.id);
+  const lang = (req.query.lang as string)?.toLowerCase();
+  const validLang = ['es', 'fr', 'it'].includes(lang) ? (lang as 'es' | 'fr' | 'it') : undefined;
+
+  const categories = db.getCategoriesByCafeId(cafe.id).map((cat) => {
+    if (validLang && cat.translations && cat.translations[validLang]) {
+      return { ...cat, name: cat.translations[validLang]! };
+    }
+    return cat;
+  });
+
+  const items = db.getItemsByCafeId(cafe.id).map((item) => {
+    if (validLang && item.translations && item.translations[validLang]) {
+      const trans = item.translations[validLang]!;
+      return {
+        ...item,
+        name: trans.name || item.name,
+        description: trans.description !== undefined ? trans.description : item.description,
+      };
+    }
+    return item;
+  });
 
   res.json({
     cafe: {

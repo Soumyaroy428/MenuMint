@@ -47,12 +47,47 @@ class Database {
   ];
 
   categories: MenuCategory[] = [
-    { id: 'cat-1', cafeId: 'cafe-1', name: 'Signature Coffee', sortOrder: 1, active: true },
-    { id: 'cat-2', cafeId: 'cafe-1', name: 'Cold Brews & Refreshers', sortOrder: 2, active: true },
-    { id: 'cat-3', cafeId: 'cafe-1', name: 'Bakery & Pastries', sortOrder: 3, active: true },
-    { id: 'cat-4', cafeId: 'cafe-1', name: 'All-Day Brunch', sortOrder: 4, active: true },
+    {
+      id: 'cat-1',
+      cafeId: 'cafe-1',
+      name: 'Signature Coffee',
+      sortOrder: 1,
+      active: true,
+      translations: { es: 'Café Artesanal', fr: 'Cafés d’Artisan', it: 'Caffè Artigianale' },
+    },
+    {
+      id: 'cat-2',
+      cafeId: 'cafe-1',
+      name: 'Cold Brews & Refreshers',
+      sortOrder: 2,
+      active: true,
+      translations: { es: 'Bebidas Frías', fr: 'Boissons Fraîches', it: 'Bevande Fredde' },
+    },
+    {
+      id: 'cat-3',
+      cafeId: 'cafe-1',
+      name: 'Bakery & Pastries',
+      sortOrder: 3,
+      active: true,
+      translations: { es: 'Bollería y Repostería', fr: 'Viennoiseries & Pâtisseries', it: 'Pasticceria e Forno' },
+    },
+    {
+      id: 'cat-4',
+      cafeId: 'cafe-1',
+      name: 'All-Day Brunch',
+      sortOrder: 4,
+      active: true,
+      translations: { es: 'Brunch Todo el Día', fr: 'Brunch Toute la Journée', it: 'Brunch Tutto il Giorno' },
+    },
     // Cafe 2 categories (to test tenant isolation)
-    { id: 'cat-201', cafeId: 'cafe-2', name: 'Italian Espresso', sortOrder: 1, active: true },
+    {
+      id: 'cat-201',
+      cafeId: 'cafe-2',
+      name: 'Italian Espresso',
+      sortOrder: 1,
+      active: true,
+      translations: { es: 'Espresso Italiano', fr: 'Expresso Italien', it: 'Espresso Italiano' },
+    },
   ];
 
   menuItems: MenuItem[] = [
@@ -67,6 +102,11 @@ class Database {
       isAvailable: true,
       dietaryTags: ['VEGETARIAN', 'CHEF_SPECIAL'],
       prepStation: 'BARISTA',
+      translations: {
+        es: { name: 'Flat White de Terciopelo', description: 'Doble ristretto espresso con leche cremosa al vapor.' },
+        fr: { name: 'Flat White Velouté', description: 'Double ristretto avec lait entier texturé et micro-mousse.' },
+        it: { name: 'Flat White Vellutato', description: 'Doppio ristretto espresso con crema di latte setosa.' },
+      },
       createdAt: new Date().toISOString(),
     },
     {
@@ -110,6 +150,11 @@ class Database {
       inventoryCount: 8,
       lowStockThreshold: 2,
       auto86Enabled: true,
+      translations: {
+        es: { name: 'Cold Brew Nitro 24h', description: 'Granos etíopes infusionados con nitrógeno para una textura cremosa.' },
+        fr: { name: 'Cold Brew Nitro 24h', description: 'Café d’Éthiopie infusé à froid et azoté pour une mousse onctueuse.' },
+        it: { name: 'Cold Brew Nitro 24h', description: 'Chicchi etiopi infusi a freddo con azoto per una crema densa.' },
+      },
       createdAt: new Date().toISOString(),
     },
     {
@@ -140,6 +185,11 @@ class Database {
       inventoryCount: 15,
       lowStockThreshold: 3,
       auto86Enabled: true,
+      translations: {
+        es: { name: 'Croissant de Mantequilla y Almendras', description: 'Hojaldre francés horneado con frangipane y almendras tostadas.' },
+        fr: { name: 'Croissant aux Amandes Pur Beurre', description: 'Pâte feuilletée pur beurre doublement cuite avec frangipane et amandes.' },
+        it: { name: 'Croissant al Burro e Mandorle', description: 'Sfoglia francese al burro farcita con frangipane e mandorle tostate.' },
+      },
       createdAt: new Date().toISOString(),
     },
     {
@@ -170,6 +220,11 @@ class Database {
       isAvailable: true,
       dietaryTags: ['VEGETARIAN', 'CHEF_SPECIAL'],
       prepStation: 'KITCHEN',
+      translations: {
+        es: { name: 'Tostada de Aguacate con Huevos Pochados', description: 'Pan de masa madre con aguacate Hass, queso feta y dos huevos pochados.' },
+        fr: { name: 'Tartine Avocat & Œufs Pochés', description: 'Pain au levain avec avocat Hass, feta danoise et deux œufs pochés bio.' },
+        it: { name: 'Tartina all’Avocado con Uova in Camicia', description: 'Pane a lievitazione naturale con avocado Hass, feta e uova in camicia.' },
+      },
       createdAt: new Date().toISOString(),
     },
     {
@@ -197,6 +252,11 @@ class Database {
       isAvailable: true,
       dietaryTags: ['VEGAN', 'GLUTEN_FREE'],
       prepStation: 'BARISTA',
+      translations: {
+        es: { name: 'Café Espresso Ristretto Doble', description: 'Estilo clásico italiano.' },
+        fr: { name: 'Double Ristretto Expresso', description: 'Style italien classique.' },
+        it: { name: 'Doppio Ristretto Espresso', description: 'Puro stile italiano.' },
+      },
       createdAt: new Date().toISOString(),
     },
   ];

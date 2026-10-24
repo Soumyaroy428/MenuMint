@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Cafe, MenuCategory, MenuItem, DietaryTag } from '../types';
+import { Cafe, MenuCategory, MenuItem, DietaryTag, SupportedLanguage } from '../types';
 import { Plus, Check, MapPin, Phone, Clock, Search, AlertCircle, RotateCcw, Award } from 'lucide-react';
+import { t } from '../utils/i18n';
 
 export const DIETARY_CONFIG: Record<DietaryTag, { label: string; emoji: string; bg: string; color: string; border: string }> = {
   VEGAN: { label: 'Vegan', emoji: '🌱', bg: '#ecfdf5', color: '#065f46', border: '#a7f3d0' },
@@ -23,6 +24,7 @@ interface MenuPageProps {
   openOrderHistoryModal?: () => void;
   openLoyaltyModal?: () => void;
   pastOrderCount?: number;
+  currentLanguage?: SupportedLanguage;
 }
 
 export const MenuPage: React.FC<MenuPageProps> = ({
@@ -37,6 +39,7 @@ export const MenuPage: React.FC<MenuPageProps> = ({
   openOrderHistoryModal,
   openLoyaltyModal,
   pastOrderCount = 0,
+  currentLanguage = 'en',
 }) => {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [selectedDietaryFilter, setSelectedDietaryFilter] = useState<string>('all');
@@ -73,11 +76,42 @@ export const MenuPage: React.FC<MenuPageProps> = ({
     return `${cafe.currencySymbol}${(cents / 100).toFixed(2)}`;
   };
 
+  const getItemName = (item: MenuItem) => {
+    return (currentLanguage !== 'en' && item.translations && item.translations[currentLanguage]?.name) || item.name;
+  };
+
+  const getItemDescription = (item: MenuItem) => {
+    return (currentLanguage !== 'en' && item.translations && item.translations[currentLanguage]?.description !== undefined)
+      ? item.translations[currentLanguage]!.description
+      : item.description;
+  };
+
+  const getCategoryName = (cat: MenuCategory) => {
+    return (currentLanguage !== 'en' && cat.translations && cat.translations[currentLanguage]) || cat.name;
+  };
+
+  const getDietaryLabel = (tag: DietaryTag) => {
+    switch (tag) {
+      case 'VEGAN': return t('dietary.vegan', currentLanguage);
+      case 'VEGETARIAN': return t('dietary.vegetarian', currentLanguage);
+      case 'GLUTEN_FREE': return t('dietary.gluten_free', currentLanguage);
+      case 'NUT_FREE': return t('dietary.nut_free', currentLanguage);
+      case 'SPICY': return t('dietary.spicy', currentLanguage);
+      case 'CHEF_SPECIAL': return t('dietary.chef_special', currentLanguage);
+      default: return (DIETARY_CONFIG as Record<string, any>)[tag]?.label || String(tag);
+    }
+  };
+
   const filteredItems = items.filter((item) => {
     const matchesCategory = selectedCategoryId === 'all' || item.categoryId === selectedCategoryId;
+    const itemName = getItemName(item).toLowerCase();
+    const itemDesc = getItemDescription(item).toLowerCase();
+    const query = searchQuery.toLowerCase();
     const matchesSearch =
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.description.toLowerCase().includes(searchQuery.toLowerCase());
+      item.name.toLowerCase().includes(query) ||
+      item.description.toLowerCase().includes(query) ||
+      itemName.includes(query) ||
+      itemDesc.includes(query);
     const matchesDietary =
       selectedDietaryFilter === 'all' ||
       (item.dietaryTags && item.dietaryTags.includes(selectedDietaryFilter as any));
@@ -92,9 +126,9 @@ export const MenuPage: React.FC<MenuPageProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
             <span className={`badge ${cafe.isOpen ? 'badge-success' : 'badge-danger'}`}>
               <Clock size={12} />
-              {cafe.isOpen ? 'Accepting Orders' : 'Kitchen Paused'}
+              {cafe.isOpen ? t('hero.accepting_orders', currentLanguage) : t('hero.kitchen_paused', currentLanguage)}
             </span>
-            <span className="badge badge-info">Digital QR Menu</span>
+            <span className="badge badge-info">{t('hero.digital_qr_menu', currentLanguage)}</span>
           </div>
 
           <h1 className="cafe-title">{cafe.name}</h1>
@@ -131,10 +165,10 @@ export const MenuPage: React.FC<MenuPageProps> = ({
             <AlertCircle size={20} color="#d97706" style={{ marginTop: 2, flexShrink: 0 }} />
             <div>
               <div style={{ fontWeight: 700, color: '#92400e', fontSize: '0.95rem' }}>
-                Kitchen Ordering Temporarily Paused
+                {t('hero.kitchen_paused_title', currentLanguage)}
               </div>
               <div style={{ color: '#b45309', fontSize: '0.85rem', marginTop: '0.2rem' }}>
-                {cafe.pauseReason || 'This café is taking a short pause for incoming orders. You may still browse items and check back shortly!'}
+                {cafe.pauseReason || t('hero.kitchen_paused_desc', currentLanguage)}
               </div>
             </div>
           </div>
@@ -173,7 +207,7 @@ export const MenuPage: React.FC<MenuPageProps> = ({
               </div>
               <div>
                 <div style={{ fontSize: '0.88rem', color: '#92400e', fontWeight: 700 }}>
-                  Digital Stamp Card Active!
+                  {t('banner.stamp_card_active', currentLanguage)}
                 </div>
                 <div style={{ fontSize: '0.78rem', color: '#b45309' }}>
                   Collect {cafe.loyaltyProgram.stampsTarget} stamps with your phone number to earn {cafe.currencySymbol}{(cafe.loyaltyProgram.rewardDiscountCents / 100).toFixed(2)} off your order!
@@ -193,7 +227,7 @@ export const MenuPage: React.FC<MenuPageProps> = ({
               }}
               onClick={openLoyaltyModal}
             >
-              View My Stamps
+              {t('banner.view_stamps', currentLanguage)}
             </button>
           </div>
         )}
@@ -217,7 +251,7 @@ export const MenuPage: React.FC<MenuPageProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <RotateCcw size={15} color="#16a34a" />
               <span style={{ fontSize: '0.85rem', color: '#166534', fontWeight: 600 }}>
-                Ordered here before? Tap to reorder your past favorites in 1 click!
+                {t('banner.reorder_title', currentLanguage)}
               </span>
             </div>
             <button
@@ -226,7 +260,7 @@ export const MenuPage: React.FC<MenuPageProps> = ({
               style={{ fontSize: '0.78rem', padding: '0.25rem 0.65rem', background: '#16a34a', borderColor: '#16a34a' }}
               onClick={openOrderHistoryModal}
             >
-              Past Orders ({pastOrderCount})
+              {t('banner.past_orders_btn', currentLanguage)} ({pastOrderCount})
             </button>
           </div>
         )}
@@ -238,7 +272,7 @@ export const MenuPage: React.FC<MenuPageProps> = ({
             type="text"
             className="form-input"
             style={{ paddingLeft: '2.5rem' }}
-            placeholder="Search coffee, drinks, bakery items..."
+            placeholder={t('menu.search_placeholder', currentLanguage)}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -251,7 +285,7 @@ export const MenuPage: React.FC<MenuPageProps> = ({
               className={`category-pill ${selectedCategoryId === 'all' ? 'active' : ''}`}
               onClick={() => setSelectedCategoryId('all')}
             >
-              All Items ({items.length})
+              {t('menu.all_items', currentLanguage)} ({items.length})
             </button>
             {categories.map((cat) => (
               <button
@@ -259,7 +293,7 @@ export const MenuPage: React.FC<MenuPageProps> = ({
                 className={`category-pill ${selectedCategoryId === cat.id ? 'active' : ''}`}
                 onClick={() => setSelectedCategoryId(cat.id)}
               >
-                {cat.name}
+                {getCategoryName(cat)}
               </button>
             ))}
           </div>
@@ -267,14 +301,14 @@ export const MenuPage: React.FC<MenuPageProps> = ({
 
         {/* Dietary Filters Bar (CP-36) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', marginRight: '0.2rem' }}>Dietary:</span>
+          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', marginRight: '0.2rem' }}>{t('menu.dietary', currentLanguage)}</span>
           <button
             type="button"
             className={`btn btn-sm ${selectedDietaryFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
             style={{ fontSize: '0.75rem', padding: '0.25rem 0.65rem', borderRadius: 20 }}
             onClick={() => setSelectedDietaryFilter('all')}
           >
-            All
+            {t('menu.all', currentLanguage)}
           </button>
           {(['VEGAN', 'VEGETARIAN', 'GLUTEN_FREE', 'NUT_FREE', 'SPICY', 'CHEF_SPECIAL'] as DietaryTag[]).map((tag) => {
             const config = DIETARY_CONFIG[tag];
@@ -296,7 +330,7 @@ export const MenuPage: React.FC<MenuPageProps> = ({
                 }}
                 onClick={() => setSelectedDietaryFilter(isSelected ? 'all' : tag)}
               >
-                <span>{config.emoji} {config.label}</span>
+                <span>{config.emoji} {getDietaryLabel(tag)}</span>
               </button>
             );
           })}
@@ -305,20 +339,22 @@ export const MenuPage: React.FC<MenuPageProps> = ({
         {/* Menu Items Grid */}
         {filteredItems.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#64748b' }}>
-            <p style={{ fontWeight: 600, fontSize: '1.1rem' }}>No items found</p>
-            <p style={{ fontSize: '0.9rem', marginTop: '0.25rem' }}>Try selecting a different category or search term.</p>
+            <p style={{ fontWeight: 600, fontSize: '1.1rem' }}>{t('menu.no_items_found', currentLanguage)}</p>
+            <p style={{ fontSize: '0.9rem', marginTop: '0.25rem' }}>{t('menu.try_different', currentLanguage)}</p>
           </div>
         ) : (
           <div className="menu-grid">
             {filteredItems.map((item) => {
               const inCartCount = cartItemCounts[item.id] || 0;
+              const displayName = getItemName(item);
+              const displayDesc = getItemDescription(item);
               return (
                 <article key={item.id} className="menu-card">
                   <div className="menu-card-img-wrap">
                     {item.imageUrl ? (
                       <img
                         src={item.imageUrl}
-                        alt={item.name}
+                        alt={displayName}
                         className="menu-card-img"
                         loading="lazy"
                         onError={(e) => {
@@ -332,7 +368,7 @@ export const MenuPage: React.FC<MenuPageProps> = ({
                     )}
                     <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: '4px' }}>
                       {!item.isAvailable ? (
-                        <span className="badge badge-danger">Sold Out</span>
+                        <span className="badge badge-danger">{t('menu.sold_out', currentLanguage)}</span>
                       ) : item.trackInventory && item.inventoryCount !== undefined && item.inventoryCount <= (item.lowStockThreshold || 3) ? (
                         <span
                           style={{
@@ -345,16 +381,16 @@ export const MenuPage: React.FC<MenuPageProps> = ({
                             fontWeight: 800,
                           }}
                         >
-                          ⚠️ Only {item.inventoryCount} Left!
+                          {t('menu.only_x_left', currentLanguage, { count: item.inventoryCount })}
                         </span>
                       ) : (
-                        <span className="badge badge-success">Available</span>
+                        <span className="badge badge-success">{t('menu.available', currentLanguage)}</span>
                       )}
                     </div>
                   </div>
 
                   <div className="menu-card-body">
-                    <h3 className="menu-card-title">{item.name}</h3>
+                    <h3 className="menu-card-title">{displayName}</h3>
                     {item.dietaryTags && item.dietaryTags.length > 0 && (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', margin: '0.25rem 0 0.4rem' }}>
                         {item.dietaryTags.map((tag) => {
@@ -377,13 +413,13 @@ export const MenuPage: React.FC<MenuPageProps> = ({
                               }}
                             >
                               <span>{cfg.emoji}</span>
-                              <span>{cfg.label}</span>
+                              <span>{getDietaryLabel(tag)}</span>
                             </span>
                           );
                         })}
                       </div>
                     )}
-                    <p className="menu-card-desc">{item.description}</p>
+                    <p className="menu-card-desc">{displayDesc}</p>
 
                     <div className="menu-card-footer">
                       <span className="menu-card-price">{formatPrice(item.price)}</span>
@@ -406,11 +442,11 @@ export const MenuPage: React.FC<MenuPageProps> = ({
                       >
                         {inCartCount > 0 ? (
                           <>
-                            <Check size={14} /> Added ({inCartCount})
+                            <Check size={14} /> {t('menu.added', currentLanguage)} ({inCartCount})
                           </>
                         ) : (
                           <>
-                            <Plus size={14} /> Add
+                            <Plus size={14} /> {t('menu.add', currentLanguage)}
                           </>
                         )}
                       </button>

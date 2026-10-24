@@ -3,9 +3,9 @@
 **Project:** MenuMint — Multi-tenant Digital Menu & Ordering SaaS for Cafés & Restaurants  
 **Live Production URL:** [https://menu-ordering-saas.vercel.app](https://menu-ordering-saas.vercel.app)  
 **Repository:** `https://github.com/Soumyaroy428/MenuMint.git` (Branch: `main`)  
-**Latest Deployed Commit:** `61dd4f0`  
-**Automated Test Suite:** 49 / 49 Tests Passing (100% Pass Rate)  
-**Generated On:** October 23, 2026  
+**Latest Deployed Commit:** `8654673` (Local ready: CP-48 Multi-Language Menu Localization)  
+**Automated Test Suite:** 50 / 50 Tests Passing (100% Pass Rate)  
+**Generated On:** October 24, 2026  
 
 ---
 
@@ -155,22 +155,29 @@ MenuMint is a lightweight, mobile-first SaaS designed for independent cafés and
   - Owner Dashboard Menu Catalog monitor bar: displays live tracked count, low stock count, and depleted items count with quick filter pills (`All`, `⚠️ Low Stock`, `🔴 86'd`).
   - 1-Click Quick Restock button (`+10 Restock`) on menu item rows (`PATCH /api/dashboard/items/:id/stock`), which instantly restores item availability when restocked above 0.
   - Full CRUD modal integration: configure units on hand, warning thresholds, and auto-86 toggle per item with strict multi-tenant boundary isolation.
+- **CP-48 (Multi-Language Menu Localization Engine):**
+  - Native multi-language menu localization supporting 4 core languages: English (`en`), Spanish (`es`), French (`fr`), and Italian (`it`).
+  - Strict type definitions (`SupportedLanguage = 'en' | 'es' | 'fr' | 'it'`) and multilingual models (`translations` on `MenuCategory` and `MenuItem`).
+  - Global UI localization dictionary (`client/src/utils/i18n.ts`) translating navigation, hero badges, pause alerts, dietary filters, station labels, cart forms, tip selectors, price breakdowns, and order tracking.
+  - Interactive language switcher (`LanguageSwitcher.tsx`) with flag indicators (🇺🇸 EN, 🇪🇸 ES, 🇫🇷 FR, 🇮🇹 IT) and persistent browser storage (`localStorage`).
+  - Dynamic server endpoint (`GET /api/cafes/:slug/menu?lang=es|fr|it`) returning localized categories and items with automated fallback to default English when a translation is absent.
+  - Dynamic client-side translation resolution ensuring instant reactivity without page reloads while preserving model translations.
+  - Comprehensive automated unit tests (50/50 passing) verifying Spanish, French, Italian, automatic English fallbacks, and multi-tenant multilingual data isolation.
 
 ---
 
-## 🔮 Upcoming Feature Checkpoints (CP-48 – CP-50)
+## 🔮 Upcoming Feature Checkpoints (CP-49 – CP-50)
 
 | Checkpoint | Status | Description |
 | :--- | :---: | :--- |
-| **CP-48** | *Next Up* | **Multi-Language Menu Localization**<br>Instant language switcher (English, Spanish, French, Italian). |
-| **CP-49** | *Queued* | **Scheduled Advance Ordering & Pickup Windows**<br>Curated time-slot selection for scheduled takeaway orders. |
+| **CP-49** | *Next Up* | **Scheduled Advance Ordering & Pickup Windows**<br>Curated time-slot selection for scheduled takeaway orders. |
 | **CP-50** | *Queued* | **Golden Master Production Audit & Performance Benchmark**<br>Comprehensive security, Lighthouse performance, and multi-tenant audit. |
 
 ---
 
 ## 🧪 Current Verification Metrics
-- **Automated Tests:** 49 / 49 passing (`npm test`, 100% pass rate)
+- **Automated Tests:** 50 / 50 passing (`npm test`, 100% pass rate)
 - **Frontend Typecheck:** 0 errors (`tsc -p client/tsconfig.json`)
 - **Backend Typecheck:** 0 errors (`tsc -p server/tsconfig.json`)
-- **Vite Production Bundle:** Clean build, gzip optimized (`342 kB`)
+- **Vite Production Bundle:** Clean build, gzip optimized (`385 kB`)
 - **Live Deployment:** Operational at [https://menu-ordering-saas.vercel.app](https://menu-ordering-saas.vercel.app)
