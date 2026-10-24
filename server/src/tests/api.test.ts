@@ -1710,6 +1710,218 @@ describe('MenuMint API Test Suite', () => {
     assert.strictEqual(bvSlots.body.slotIntervalMinutes, 30);
     assert.strictEqual(bvSlots.body.operatingHours.open, '09:00');
   });
+
+  test('CP-50: Golden Master Production Audit & Full System Benchmark (End-to-End Enterprise Flow & Multi-Tenant Boundaries)', async () => {
+    // 1. Health and public discovery audit
+    const health = await request(app).get('/api/health');
+    assert.strictEqual(health.status, 200);
+    assert.strictEqual(health.body.status, 'ok');
+
+    const cafes = await request(app).get('/api/cafes');
+    assert.strictEqual(cafes.status, 200);
+    assert.ok(cafes.body.cafes.length >= 2);
+    assert.ok(cafes.body.cafes.some((c: any) => c.slug === 'daily-grind'));
+    assert.ok(cafes.body.cafes.some((c: any) => c.slug === 'bella-vista'));
+
+    // 2. Multi-language and dietary menu localization audit
+    const menuEs = await request(app).get('/api/cafes/daily-grind/menu?lang=es');
+    assert.strictEqual(menuEs.status, 200);
+    assert.strictEqual(menuEs.body.cafe.currency, 'USD');
+    assert.strictEqual(menuEs.body.cafe.taxRate, 9.5);
+    const cat1Es = menuEs.body.categories.find((c: any) => c.id === 'cat-1');
+    const item1Es = menuEs.body.items.find((i: any) => i.id === 'item-1');
+    assert.strictEqual(cat1Es.name, 'Café Artesanal');
+    assert.strictEqual(item1Es.name, 'Flat White de Terciopelo');
+
+    // 3. Loyalty inquiry & phone normalization audit
+    const loyaltyPhone = '(555) 999-8877';
+    const loyaltyCheck = await request(app).get(`/api/cafes/daily-grind/loyalty?phone=${encodeURIComponent(loyaltyPhone)}`);
+    assert.strictEqual(loyaltyCheck.status, 200);
+    assert.strictEqual(loyaltyCheck.body.success, true);
+    assert.strictEqual(loyaltyCheck.body.enabled, true);
+    assert.ok(loyaltyCheck.body.account !== null);
+    assert.strictEqual(loyaltyCheck.body.account.stampsTarget, 5);
+
+    // 4. Promo code validation
+    const promoRes = await request(app)
+      .post('/api/cafes/daily-grind/promo/validate')
+      .send({ code: 'MINT10', subtotal: 3000 });
+    assert.strictEqual(promoRes.status, 200);
+    assert.strictEqual(promoRes.body.valid, true);
+    assert.strictEqual(promoRes.body.discountAmount, 300); // 10% of 3000
+
+    // 5. Scheduled takeaway placement with advance slot, promo, and tip
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const dateStr = tomorrow.toISOString().split('T')[0];
+    const slotsRes = await request(app).get(`/api/cafes/daily-grind/pickup-slots?date=${dateStr}`);
+    assert.strictEqual(slotsRes.status, 200);
+    assert.ok(slotsRes.body.slots.length > 0);
+    const chosenSlot = slotsRes.body.slots[2];
+
+    const orderRes = await request(app)
+      .post('/api/orders')
+      .send({
+        cafeSlug: 'daily-grind',
+        customerName: 'Golden Master Customer',
+        customerPhone: loyaltyPhone,
+        orderType: 'takeaway',
+        fulfillmentType: 'SCHEDULED',
+        scheduledPickupTime: chosenSlot.time,
+        promoCode: 'MINT10',
+        tip: 200,
+        items: [
+          { menuItemId: 'item-1', quantity: 2 },
+          { menuItemId: 'item-8', quantity: 1 },
+        ],
+      });
+    assert.strictEqual(orderRes.status, 201);
+    const createdOrder = orderRes.body.order;
+    assert.ok(createdOrder.orderRef.startsWith('ORD-'));
+    assert.strictEqual(createdOrder.fulfillmentType, 'SCHEDULED');
+    assert.strictEqual(createdOrder.tip, 200);
+    assert.ok(createdOrder.discount > 0);
+    assert.strictEqual(createdOrder.taxRate, 9.5);
+    assert.strictEqual(createdOrder.status, 'PENDING');
+    assert.ok(createdOrder.items.some((i: any) => i.prepStation === 'BARISTA'));
+    assert.ok(createdOrder.items.some((i: any) => i.prepStation === 'KITCHEN'));
+
+    // 6. Kitchen Display System (KDS) Bump Bar Lifecycle Progression
+    // PENDING -> ACCEPTED
+    const acceptRes = await request(app)
+      .patch(`/api/dashboard/orders/${createdOrder.id}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'ACCEPTED' });
+    assert.strictEqual(acceptRes.status, 200);
+    assert.strictEqual(acceptRes.body.order.status, 'ACCEPTED');
+
+    // Adjust Prep ETA (+5 mins)
+    const etaRes = await request(app)
+      .patch(`/api/dashboard/orders/${createdOrder.id}/eta`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ deltaMinutes: 5 });
+    assert.strictEqual(etaRes.status, 200);
+    assert.strictEqual(etaRes.body.order.estimatedPrepMinutes, createdOrder.estimatedPrepMinutes + 5);
+
+    // ACCEPTED -> PREPARING
+    const prepRes = await request(app)
+      .patch(`/api/dashboard/orders/${createdOrder.id}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'PREPARING' });
+    assert.strictEqual(prepRes.status, 200);
+    assert.strictEqual(prepRes.body.order.status, 'PREPARING');
+
+    // PREPARING -> READY
+    const readyRes = await request(app)
+      .patch(`/api/dashboard/orders/${createdOrder.id}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'READY' });
+    assert.strictEqual(readyRes.status, 200);
+    assert.strictEqual(readyRes.body.order.status, 'READY');
+
+    // READY -> COMPLETED
+    const compRes = await request(app)
+      .patch(`/api/dashboard/orders/${createdOrder.id}/status`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'COMPLETED' });
+    assert.strictEqual(compRes.status, 200);
+    assert.strictEqual(compRes.body.order.status, 'COMPLETED');
+
+    // 7. Post-Meal Customer CSAT Feedback Review
+    const csatRes = await request(app)
+      .post(`/api/orders/${createdOrder.orderRef}/feedback`)
+      .send({
+        rating: 5,
+        comment: 'Outstanding golden master experience! Perfectly brewed and packaged.',
+      });
+    assert.strictEqual(csatRes.status, 201);
+    assert.strictEqual(csatRes.body.success, true);
+
+    // 8. Mathematical Penny-Exact Bill Splitting Precision Check
+    // Split into 3 ways: ensure total of shares exactly equals order total with zero remainder drift
+    const splitRes = await request(app).get(`/api/orders/${createdOrder.orderRef}/split?ways=3`);
+    assert.strictEqual(splitRes.status, 200);
+    assert.strictEqual(splitRes.body.split.splitCount, 3);
+    const shares = splitRes.body.split.guestShares;
+    assert.strictEqual(shares.length, 3);
+    const sumCents = shares.reduce((acc: number, s: any) => acc + s.amountCents, 0);
+    assert.strictEqual(sumCents, createdOrder.total);
+
+    // 9. Financial Accounting & Tax Statement Audit
+    const acctRes = await request(app)
+      .get('/api/dashboard/accounting/report?preset=all')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    assert.strictEqual(acctRes.status, 200);
+    assert.ok(acctRes.body.report.grossSales > 0);
+    assert.ok(acctRes.body.report.netSales > 0);
+    assert.ok(acctRes.body.report.totalTaxCollected > 0);
+    assert.ok(acctRes.body.report.taxBreakdown.length > 0);
+
+    const exportCsv = await request(app)
+      .get('/api/dashboard/accounting/export?preset=all')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    assert.strictEqual(exportCsv.status, 200);
+    assert.ok(exportCsv.text.includes('MenuMint Periodic Accounting & Tax Statement'));
+    assert.ok(exportCsv.text.includes('TAX COMPLIANCE LIABILITY SUMMARY:'));
+
+    // 10. Multi-Tenant Enterprise Security Isolation Matrix
+    // Authenticate owner of Cafe 2 (Bella Vista)
+    const auth2 = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'owner@bellavista.com', password: 'password123' });
+    assert.strictEqual(auth2.status, 200);
+    const ownerToken2 = auth2.body.token;
+
+    // Cross-tenant order status mutation must return 403 Forbidden
+    const crossOrderMut = await request(app)
+      .patch(`/api/dashboard/orders/${createdOrder.id}/status`)
+      .set('Authorization', `Bearer ${ownerToken2}`)
+      .send({ status: 'CANCELLED' });
+    assert.strictEqual(crossOrderMut.status, 403);
+
+    // Cross-tenant order ETA mutation must return 403 Forbidden
+    const crossEtaMut = await request(app)
+      .patch(`/api/dashboard/orders/${createdOrder.id}/eta`)
+      .set('Authorization', `Bearer ${ownerToken2}`)
+      .send({ deltaMinutes: 10 });
+    assert.strictEqual(crossEtaMut.status, 403);
+
+    // Cross-tenant item modification must return 403 Forbidden
+    const crossItemMut = await request(app)
+      .put('/api/dashboard/items/item-1')
+      .set('Authorization', `Bearer ${ownerToken2}`)
+      .send({ name: 'Hacked Item', price: 999 });
+    assert.strictEqual(crossItemMut.status, 403);
+
+    // Cross-tenant item deletion must return 403 Forbidden
+    const crossItemDel = await request(app)
+      .delete('/api/dashboard/items/item-1')
+      .set('Authorization', `Bearer ${ownerToken2}`);
+    assert.strictEqual(crossItemDel.status, 403);
+
+    // Cross-tenant inventory restock must return 404 Not Found (tenant obscurity)
+    const crossStockMut = await request(app)
+      .patch('/api/dashboard/items/item-1/stock')
+      .set('Authorization', `Bearer ${ownerToken2}`)
+      .send({ restockDelta: 50 });
+    assert.strictEqual(crossStockMut.status, 404);
+
+    // Cross-tenant order list isolation: Cafe 2 must NOT see createdOrder
+    const cafe2Orders = await request(app)
+      .get('/api/dashboard/orders')
+      .set('Authorization', `Bearer ${ownerToken2}`);
+    assert.strictEqual(cafe2Orders.status, 200);
+    assert.ok(cafe2Orders.body.orders.every((o: any) => o.cafeId === 'cafe-2'));
+    assert.ok(!cafe2Orders.body.orders.some((o: any) => o.id === createdOrder.id));
+
+    // Cross-tenant accounting report isolation: Cafe 2 statement must show Cafe 2 details only
+    const cafe2Acct = await request(app)
+      .get('/api/dashboard/accounting/report?preset=all')
+      .set('Authorization', `Bearer ${ownerToken2}`);
+    assert.strictEqual(cafe2Acct.status, 200);
+    assert.strictEqual(cafe2Acct.body.report.currency, 'EUR');
+    assert.strictEqual(cafe2Acct.body.report.currencySymbol, '€');
+  });
 });
 
 

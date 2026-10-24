@@ -10,6 +10,7 @@
     "build:server": "node server/node_modules/typescript/bin/tsc -p server/tsconfig.json",
     "build": "npm run install:all && npm run build:client && npm run build:server",
     "start": "node server/dist/index.js",
-    "test": "node --test server/dist/tests/*.test.js"
+    "test": "node --test server/dist/tests/*.test.js",
+    "audit": "npm run build:server && node --test server/dist/tests/*.test.js"
   }
 }
