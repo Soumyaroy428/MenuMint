@@ -49,6 +49,8 @@ export interface PaymentSession {
   status: 'ACTIVE' | 'PENDING';
   checkoutUrl: string;
   qrPayload?: string; // UPI intent string: upi://pay?pa=...
+  upiId?: string;     // Authenticated UPI ID from environment
+  payeeName?: string; // Authenticated Payee name from environment
 }
 
 export interface AdvanceOrderingConfig {
@@ -191,6 +193,8 @@ export interface Order {
   paidAt?: string;                  // ISO timestamp of payment confirmation
   checkoutUrl?: string;             // Hosted YouPI checkout portal URL
   qrPayload?: string;               // UPI Intent string for QR code generation
+  upiId?: string;                   // Authenticated UPI ID for this order
+  payeeName?: string;               // Authenticated Payee display name
   fulfillmentType?: FulfillmentType; // CP-49: 'ASAP' | 'SCHEDULED'
   scheduledPickupTime?: string;     // CP-49: ISO timestamp for advance pickup
   pickupWindow?: string;            // CP-49: formatted window, e.g. "2:30 PM - 2:45 PM"

@@ -16,6 +16,7 @@ describe('YOUPI-PG Payment Integration Master Test Suite (Section 11 Checkpoint)
   before(() => {
     process.env.YOUPI_WEBHOOK_SECRET = webhookSecret;
     process.env.NODE_ENV = 'test';
+    process.env.YOUPI_UPI_ID = 'testmerchant@okhdfcbank';
 
     // Seed test order
     testOrder = db.createOrder({

@@ -3,6 +3,7 @@ import { db } from '../db.js';
 import { OrderItemSnapshot, OrderType, PaymentMethod, PaymentStatus } from '../types.js';
 import { calculateBillSplit } from '../billSplitter.js';
 import { youpiPaymentService } from '../services/paymentService.js';
+import { PaymentConfigValidator } from '../config/paymentConfig.js';
 
 export const publicRouter = Router();
 
@@ -483,6 +484,8 @@ publicRouter.post('/orders', async (req: Request, res: Response): Promise<void> 
       newOrder.paymentId = session.paymentId;
       newOrder.checkoutUrl = session.checkoutUrl;
       newOrder.qrPayload = session.qrPayload;
+      newOrder.upiId = session.upiId;
+      newOrder.payeeName = session.payeeName;
     } catch {
       // Session creation fallback already handled internally
     }
@@ -522,6 +525,8 @@ publicRouter.post('/orders', async (req: Request, res: Response): Promise<void> 
       paymentId: newOrder.paymentId,
       checkoutUrl: newOrder.checkoutUrl,
       qrPayload: newOrder.qrPayload,
+      upiId: newOrder.upiId,
+      payeeName: newOrder.payeeName,
       createdAt: newOrder.createdAt,
     },
     loyalty: loyaltyResult
@@ -606,6 +611,7 @@ publicRouter.get('/orders/:orderRef/payment-status', (req: Request, res: Respons
   }
 
   const cafe = db.getCafeById(order.cafeId);
+  const paymentConfig = PaymentConfigValidator.getValidatedConfig(cafe?.paymentConfig);
 
   res.json({
     success: true,
@@ -616,14 +622,28 @@ publicRouter.get('/orders/:orderRef/payment-status', (req: Request, res: Respons
     paymentId: order.paymentId,
     paidAt: order.paidAt,
     total: order.total,
-    currency: cafe?.currency || 'USD',
-    currencySymbol: cafe?.currencySymbol || '$',
+    currency: order.currency || paymentConfig.currency || 'INR',
+    currencySymbol: cafe?.currencySymbol || '₹',
     checkoutUrl: order.checkoutUrl,
     qrPayload: order.qrPayload,
+    upiId: order.upiId || paymentConfig.upiId,
+    payeeName: order.payeeName || paymentConfig.payeeName,
   });
 });
 
-// 4b. YouPI-PG Webhook listener (Section 12: Webhooks, fulfilment & reconciliation)
+// 4b. Public endpoint returning authenticated payment metadata from environment
+publicRouter.get('/payment/config', (_req: Request, res: Response): void => {
+  const config = PaymentConfigValidator.getValidatedConfig();
+  res.json({
+    success: true,
+    upiId: config.upiId,
+    payeeName: config.payeeName,
+    currency: config.currency,
+    isConfigured: config.isConfigured,
+  });
+});
+
+// 4c. YouPI-PG Webhook listener (Section 12: Webhooks, fulfilment & reconciliation)
 publicRouter.post(['/payment/webhook', '/webhooks/payment'], (req: Request, res: Response): void => {
   const signature = (req.headers['x-gateway-signature'] || req.headers['x-signature']) as string | undefined;
   const deliveryId = (req.headers['x-gateway-delivery-id'] || req.headers['x-delivery-id']) as string | undefined;
@@ -675,8 +695,16 @@ publicRouter.post(['/payment/webhook', '/webhooks/payment'], (req: Request, res:
   });
 });
 
-// 4c. Payment simulation endpoint for sandbox verification
+// 4d. Payment simulation endpoint (Guarded: strictly disabled in production)
 publicRouter.post('/orders/:orderRef/simulate-payment', (req: Request, res: Response): void => {
+  if (process.env.NODE_ENV === 'production' && process.env.ENABLE_TEST_SIMULATION !== 'true') {
+    res.status(403).json({
+      error: 'Forbidden',
+      message: 'Payment simulation endpoint is strictly disabled in production mode.',
+    });
+    return;
+  }
+
   const { orderRef } = req.params;
   const order = db.getOrderByRef(orderRef);
 

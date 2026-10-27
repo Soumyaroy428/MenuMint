@@ -30,9 +30,11 @@ export const YoupiPaymentModal: React.FC<YoupiPaymentModalProps> = ({
   onPaymentSuccess,
   onSwitchToCash,
 }) => {
-  const [paymentStatus, setPaymentStatus] = useState<'PENDING' | 'PROCESSING' | 'PAID' | 'FAILED' | 'EXPIRED' | 'CANCELLED'>('PENDING');
-  const [isSimulating, setIsSimulating] = useState<boolean>(false);
+  const [paymentStatus, setPaymentStatus] = useState<
+    'PENDING' | 'PROCESSING' | 'PAID' | 'FAILED' | 'EXPIRED' | 'CANCELLED'
+  >('PENDING');
   const [copiedUpi, setCopiedUpi] = useState<boolean>(false);
+  const [qrImageError, setQrImageError] = useState<boolean>(false);
   const pollTimerRef = useRef<number | null>(null);
 
   // Sync state when order changes
@@ -83,36 +85,42 @@ export const YoupiPaymentModal: React.FC<YoupiPaymentModalProps> = ({
 
   if (!isOpen || !order) return null;
 
+  // Dynamically resolve authenticated UPI ID from order, QR payload, or Vercel environment
+  const upiId = (
+    order.upiId ||
+    (order.qrPayload ? new URLSearchParams(order.qrPayload.replace(/^upi:\/\/pay\??/, '')).get('pa') : '') ||
+    (import.meta as any).env?.VITE_YOUPI_UPI_ID ||
+    (import.meta as any).env?.VITE_UPI_ID ||
+    ''
+  ).trim();
+
+  const payeeName = (
+    order.payeeName ||
+    (order.qrPayload ? new URLSearchParams(order.qrPayload.replace(/^upi:\/\/pay\??/, '')).get('pn') : '') ||
+    (import.meta as any).env?.VITE_YOUPI_PAYEE_NAME ||
+    (import.meta as any).env?.VITE_PAYEE_NAME ||
+    'MenuMint Merchant'
+  ).trim();
+
   const totalFormatted = (order.total / 100).toFixed(2);
-  const upiId = 'dailygrind@upi';
-  const qrData = order.qrPayload || `upi://pay?pa=${encodeURIComponent(upiId)}&pn=MenuMint&am=${totalFormatted}&cu=USD&tr=${order.orderRef}`;
-  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&data=${encodeURIComponent(qrData)}`;
+
+  // Standardized NPCI UPI URI with strict Indian Rupee (INR) currency formatting
+  const qrData = upiId
+    ? (order.qrPayload && order.qrPayload.includes(`pa=${encodeURIComponent(upiId)}`)
+        ? order.qrPayload
+        : `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(payeeName)}&am=${totalFormatted}&cu=INR&tr=${order.orderRef}&tn=${encodeURIComponent('MenuMint ' + order.orderRef)}`)
+    : '';
+
+  // Dual-CDN high-reliability QR Code image
+  const qrImageUrl = qrImageError
+    ? `https://quickchart.io/qr?size=220&text=${encodeURIComponent(qrData)}`
+    : `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&data=${encodeURIComponent(qrData)}`;
 
   const handleCopyUpi = () => {
+    if (!upiId) return;
     navigator.clipboard.writeText(upiId);
     setCopiedUpi(true);
     setTimeout(() => setCopiedUpi(false), 2000);
-  };
-
-  const handleSimulatePayment = async () => {
-    setIsSimulating(true);
-    try {
-      const res = await fetch(`/api/orders/${order.orderRef}/simulate-payment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ outcome: 'PAID' }),
-      });
-      if (res.ok) {
-        setPaymentStatus('PAID');
-        setTimeout(() => {
-          onPaymentSuccess({ ...order, paymentStatus: 'PAID', paidAt: new Date().toISOString() });
-        }, 1200);
-      }
-    } catch {
-      // Simulation failed
-    } finally {
-      setIsSimulating(false);
-    }
   };
 
   const handleSwitchToCounter = () => {
@@ -299,79 +307,104 @@ export const YoupiPaymentModal: React.FC<YoupiPaymentModalProps> = ({
                 }}
               >
                 <Clock size={16} className="spin-slow" />
-                <span>Waiting for UPI / Gateway Authorization...</span>
+                <span>Waiting for UPI Payment Confirmation...</span>
               </div>
             )}
           </div>
 
           {/* QR Code Container */}
           {paymentStatus !== 'PAID' && (
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: 12,
-                padding: '1.25rem 1rem',
-                marginBottom: '1.25rem',
-              }}
-            >
+            upiId ? (
               <div
                 style={{
-                  background: '#ffffff',
-                  padding: 8,
-                  borderRadius: 12,
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-                  marginBottom: '0.75rem',
-                }}
-              >
-                <img
-                  src={qrImageUrl}
-                  alt="UPI Payment QR Code"
-                  style={{ width: 180, height: 180, display: 'block', borderRadius: 6 }}
-                />
-              </div>
-
-              <div style={{ fontSize: '0.82rem', color: '#475569', fontWeight: 600, textAlign: 'center' }}>
-                Scan with any UPI App (GPay, PhonePe, Paytm, BHIM)
-              </div>
-
-              {/* UPI ID copy */}
-              <div
-                style={{
-                  marginTop: '0.5rem',
                   display: 'flex',
+                  flexDirection: 'column',
                   alignItems: 'center',
-                  gap: 6,
-                  background: '#ffffff',
-                  border: '1px solid #cbd5e1',
-                  borderRadius: 6,
-                  padding: '0.25rem 0.6rem',
-                  fontSize: '0.75rem',
-                  color: '#334155',
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 12,
+                  padding: '1.25rem 1rem',
+                  marginBottom: '1.25rem',
                 }}
               >
-                <span style={{ fontWeight: 600 }}>UPI ID: {upiId}</span>
-                <button
-                  type="button"
-                  onClick={handleCopyUpi}
+                <div
                   style={{
-                    border: 'none',
-                    background: 'none',
-                    cursor: 'pointer',
-                    color: copiedUpi ? '#059669' : '#64748b',
-                    padding: 0,
+                    background: '#ffffff',
+                    padding: 8,
+                    borderRadius: 12,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                    marginBottom: '0.75rem',
+                  }}
+                >
+                  <img
+                    src={qrImageUrl}
+                    onError={() => setQrImageError(true)}
+                    alt="UPI Payment QR Code"
+                    style={{ width: 180, height: 180, display: 'block', borderRadius: 6 }}
+                  />
+                </div>
+
+                <div style={{ fontSize: '0.82rem', color: '#475569', fontWeight: 600, textAlign: 'center' }}>
+                  Scan with any UPI App (GPay, PhonePe, Paytm, BHIM)
+                </div>
+
+                {/* Verified UPI ID display */}
+                <div
+                  style={{
+                    marginTop: '0.5rem',
                     display: 'flex',
                     alignItems: 'center',
+                    gap: 6,
+                    background: '#ffffff',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: 6,
+                    padding: '0.25rem 0.6rem',
+                    fontSize: '0.75rem',
+                    color: '#334155',
                   }}
-                  title="Copy UPI ID"
                 >
-                  {copiedUpi ? <Check size={13} /> : <Copy size={13} />}
-                </button>
+                  <span style={{ fontWeight: 600 }}>UPI ID: {upiId}</span>
+                  <button
+                    type="button"
+                    onClick={handleCopyUpi}
+                    style={{
+                      border: 'none',
+                      background: 'none',
+                      cursor: 'pointer',
+                      color: copiedUpi ? '#059669' : '#64748b',
+                      padding: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                    title="Copy UPI ID"
+                  >
+                    {copiedUpi ? <Check size={13} /> : <Copy size={13} />}
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div
+                style={{
+                  background: '#fffbeb',
+                  border: '1px solid #fde68a',
+                  borderRadius: 12,
+                  padding: '1.25rem 1rem',
+                  marginBottom: '1.25rem',
+                  textAlign: 'center',
+                }}
+              >
+                <AlertCircle size={28} color="#d97706" style={{ margin: '0 auto 0.5rem' }} />
+                <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#92400e', marginBottom: '0.25rem' }}>
+                  UPI Setup Required
+                </div>
+                <div style={{ fontSize: '0.8rem', color: '#b45309', lineHeight: 1.5, marginBottom: '0.75rem' }}>
+                  Please set <code>YOUPI_UPI_ID</code> (or <code>VITE_YOUPI_UPI_ID</code>) in your Vercel project environment variables to activate live UPI QR payments.
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#78350f', fontWeight: 600 }}>
+                  In the meantime, you can settle your order directly at the counter.
+                </div>
+              </div>
+            )
           )}
 
           {/* Action Buttons */}
@@ -396,22 +429,27 @@ export const YoupiPaymentModal: React.FC<YoupiPaymentModalProps> = ({
                 </button>
               )}
 
-              {/* Direct UPI Intent (for mobile devices) */}
-              <a
-                href={qrData}
-                className="btn btn-primary"
-                style={{
-                  width: '100%',
-                  justifyContent: 'center',
-                  gap: 8,
-                  padding: '0.7rem',
-                  fontSize: '0.9rem',
-                  textDecoration: 'none',
-                }}
-              >
-                <Smartphone size={18} />
-                <span>Pay via UPI App</span>
-              </a>
+              {/* Direct UPI Intent (for mobile devices: GPay, PhonePe, Paytm, CRED, BHIM) */}
+              {upiId && qrData && (
+                <a
+                  href={qrData}
+                  className="btn btn-primary"
+                  style={{
+                    width: '100%',
+                    justifyContent: 'center',
+                    gap: 8,
+                    padding: '0.75rem',
+                    fontSize: '0.92rem',
+                    fontWeight: 700,
+                    textDecoration: 'none',
+                    background: '#059669',
+                    borderRadius: 8,
+                  }}
+                >
+                  <Smartphone size={18} />
+                  <span>Pay via UPI App (PhonePe / GPay / Paytm)</span>
+                </a>
+              )}
 
               {/* External checkout link if hosted */}
               {order.checkoutUrl && (
@@ -434,29 +472,6 @@ export const YoupiPaymentModal: React.FC<YoupiPaymentModalProps> = ({
                 </a>
               )}
 
-              {/* Instant Sandbox Callback Trigger */}
-              <button
-                type="button"
-                onClick={handleSimulatePayment}
-                disabled={isSimulating}
-                className="btn btn-secondary"
-                style={{
-                  width: '100%',
-                  justifyContent: 'center',
-                  gap: 6,
-                  padding: '0.6rem',
-                  fontSize: '0.8rem',
-                  background: '#f1f5f9',
-                  borderColor: '#cbd5e1',
-                  color: '#334155',
-                  fontWeight: 600,
-                }}
-                title="Trigger instant HMAC-SHA256 test payment authorization"
-              >
-                <RefreshCw size={14} className={isSimulating ? 'spin-slow' : ''} />
-                <span>{isSimulating ? 'Simulating Callback...' : 'Simulate Instant Payment (Test Callback)'}</span>
-              </button>
-
               {/* Pay at Counter Fallback */}
               <button
                 type="button"
@@ -465,7 +480,7 @@ export const YoupiPaymentModal: React.FC<YoupiPaymentModalProps> = ({
                   background: 'none',
                   border: 'none',
                   color: '#64748b',
-                  fontSize: '0.8rem',
+                  fontSize: '0.82rem',
                   cursor: 'pointer',
                   padding: '0.4rem 0',
                   marginTop: '0.25rem',

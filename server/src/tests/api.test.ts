@@ -1925,6 +1925,7 @@ describe('MenuMint API Test Suite', () => {
   });
 
   test('CP-51: YouPI-PG V2 Payment Gateway Integration & Reconcile (Online Session, HMAC-SHA256 Webhook, Status Polling & Counter Settlement)', async () => {
+    process.env.YOUPI_UPI_ID = 'testmerchant@okhdfcbank';
     // 1. Submit order choosing YouPI Online Payment
     const onlineOrderRes = await request(app)
       .post('/api/orders')
@@ -1943,7 +1944,7 @@ describe('MenuMint API Test Suite', () => {
     assert.strictEqual(orderData.paymentStatus, 'PENDING');
     assert.ok(orderData.paymentId && orderData.paymentId.startsWith('youpi_'));
     assert.ok(orderData.checkoutUrl && orderData.checkoutUrl.includes('checkout'));
-    assert.ok(orderData.qrPayload && orderData.qrPayload.startsWith('upi://pay?pa=dailygrind%40upi'));
+    assert.ok(orderData.qrPayload && orderData.qrPayload.startsWith('upi://pay?pa='));
 
     // 2. Poll payment status endpoint
     const pollRes = await request(app).get(`/api/orders/${orderData.orderRef}/payment-status`);

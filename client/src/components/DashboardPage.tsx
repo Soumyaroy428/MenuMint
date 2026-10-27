@@ -883,33 +883,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onBackToMenu, open
           </form>
 
           <div style={{ borderTop: '1px solid #f1f5f9', marginTop: '1.25rem', paddingTop: '1rem', textAlign: 'center' }}>
-            <p style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.4rem' }}>
-              Default Store Credentials:
-            </p>
-            <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center', marginBottom: '0.75rem' }}>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                style={{ fontSize: '0.72rem' }}
-                onClick={() => {
-                  setEmail('owner@dailygrind.com');
-                  setPassword('password123');
-                }}
-              >
-                ☕ The Daily Grind
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                style={{ fontSize: '0.72rem' }}
-                onClick={() => {
-                  setEmail('owner@bellavista.com');
-                  setPassword('password123');
-                }}
-              >
-                🍕 Bella Vista Bistro
-              </button>
-            </div>
             <button className="btn btn-secondary btn-sm" onClick={onBackToMenu}>
               ← Return to Public Menu
             </button>

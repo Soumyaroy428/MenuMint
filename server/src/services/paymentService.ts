@@ -36,7 +36,9 @@ export class YoupiPaymentService {
     const currency = 'INR';
 
     // Construct standardized UPI Intent URI according to NPCI / Indian UPI specification
-    const qrPayload = `upi://pay?pa=${encodeURIComponent(config.upiId)}&pn=${encodeURIComponent(config.payeeName)}&am=${amountMajor}&cu=${currency}&tr=${order.orderRef}&tn=${encodeURIComponent('MenuMint ' + order.orderRef)}`;
+    const qrPayload = config.upiId
+      ? `upi://pay?pa=${encodeURIComponent(config.upiId)}&pn=${encodeURIComponent(config.payeeName)}&am=${amountMajor}&cu=${currency}&tr=${order.orderRef}&tn=${encodeURIComponent('MenuMint ' + order.orderRef)}`
+      : '';
 
     const returnUrl = `${config.appUrl}/?order=${order.orderRef}&payment=complete`;
 
@@ -77,7 +79,9 @@ export class YoupiPaymentService {
           currency,
           status: 'ACTIVE',
           checkoutUrl: data.checkoutUrl || `${config.checkoutUrl}/checkout/${data.paymentId || order.orderRef}`,
-          qrPayload,
+          qrPayload: data.qrPayload || qrPayload,
+          upiId: config.upiId,
+          payeeName: config.payeeName,
         };
       }
     } catch {
@@ -96,6 +100,8 @@ export class YoupiPaymentService {
       status: 'ACTIVE',
       checkoutUrl,
       qrPayload,
+      upiId: config.upiId,
+      payeeName: config.payeeName,
     };
   }
 
