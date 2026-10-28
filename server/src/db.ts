@@ -1,4 +1,4 @@
-import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, OrderFeedback, PrepStation, AccountingReport, TaxBreakdownLine, LoyaltyProgramConfig, LoyaltyAccount, InventorySummary, AdvanceOrderingConfig, PickupSlot, PaymentStatus, PaymentMethod, PaymentAuditEntry, YoupiMerchantConfig } from './types.js';
+import { Cafe, MenuCategory, MenuItem, Order, User, OrderStatus, AnalyticsSummary, PromoCode, OrderFeedback, PrepStation, AccountingReport, TaxBreakdownLine, LoyaltyProgramConfig, LoyaltyAccount, InventorySummary, AdvanceOrderingConfig, PickupSlot, PaymentStatus, PaymentMethod, PaymentAuditEntry, YoupiMerchantConfig, NotificationLog } from './types.js';
 import bcrypt from 'bcryptjs';
 
 // Pre-seeded database in memory with consistent IDs and tenant isolation
@@ -501,6 +501,25 @@ class Database {
   ];
 
   private orderCounter = 1003;
+  notificationLogs: NotificationLog[] = [];
+
+  recordNotification(log: NotificationLog): void {
+    this.notificationLogs.push(log);
+  }
+
+  getNotificationsByOrderRef(orderRef: string): NotificationLog[] {
+    return this.notificationLogs.filter((n) => n.orderRef === orderRef);
+  }
+
+  getRecentNotifications(limit = 50): NotificationLog[] {
+    return [...this.notificationLogs].reverse().slice(0, limit);
+  }
+
+  isNotificationSent(idempotencyKey: string): boolean {
+    return this.notificationLogs.some(
+      (n) => n.idempotencyKey === idempotencyKey && n.status !== 'FAILED'
+    );
+  }
 
   // Accessors
   getCafeBySlug(slug: string): Cafe | undefined {
@@ -906,7 +925,13 @@ class Database {
       qrPayload?: string;
       utr?: string;
       deliveryId?: string;
-      source?: 'WEBHOOK' | 'STATUS_POLL' | 'COUNTER_STAFF' | 'SESSION_CREATION' | 'SIMULATION';
+      source?:
+        | 'WEBHOOK'
+        | 'STATUS_POLL'
+        | 'COUNTER_STAFF'
+        | 'SESSION_CREATION'
+        | 'SIMULATION'
+        | 'CUSTOMER_SUBMITTED';
       reason?: string;
     }
   ): Order | undefined {

@@ -4,6 +4,7 @@ import { OrderItemSnapshot, OrderType, PaymentMethod, PaymentStatus } from '../t
 import { calculateBillSplit } from '../billSplitter.js';
 import { youpiPaymentService } from '../services/paymentService.js';
 import { PaymentConfigValidator } from '../config/paymentConfig.js';
+import { notificationService } from '../services/notificationService.js';
 
 export const publicRouter = Router();
 
@@ -147,6 +148,7 @@ publicRouter.post('/orders', async (req: Request, res: Response): Promise<void> 
     orderType,
     customerName,
     customerPhone,
+    customerEmail,
     tableNumber,
     notes,
     items,
@@ -450,6 +452,7 @@ publicRouter.post('/orders', async (req: Request, res: Response): Promise<void> 
     orderType: validOrderType,
     customerName: customerName.trim().slice(0, 100),
     customerPhone: customerPhone ? String(customerPhone).trim().slice(0, 20) : undefined,
+    customerEmail: customerEmail ? String(customerEmail).trim().slice(0, 100) : undefined,
     tableNumber: tableNumber ? String(tableNumber).trim().slice(0, 30) : undefined,
     notes: notes ? String(notes).trim().slice(0, 300) : undefined,
     items: orderItemSnapshots,
@@ -490,6 +493,9 @@ publicRouter.post('/orders', async (req: Request, res: Response): Promise<void> 
       // Session creation fallback already handled internally
     }
   }
+
+  // Trigger Order Created notification (SMS/Email)
+  notificationService.sendOrderCreatedNotification(newOrder, cafe.name).catch(() => {});
 
   res.status(201).json({
     success: true,
@@ -726,6 +732,81 @@ publicRouter.post('/orders/:orderRef/simulate-payment', (req: Request, res: Resp
     success: true,
     message: `Simulated payment outcome: ${outcome}`,
     order: updated,
+  });
+});
+
+// 4e. Submit manual UPI transaction reference / UTR (PRD Checkpoint 4 & 7)
+publicRouter.post('/orders/:orderRef/submit-utr', (req: Request, res: Response): void => {
+  const { orderRef } = req.params;
+  const { utr } = req.body;
+
+  if (!utr || typeof utr !== 'string' || !utr.trim()) {
+    res.status(400).json({
+      error: 'Missing UTR',
+      message: 'Please provide a valid 12-digit UPI Transaction Reference (UTR).',
+    });
+    return;
+  }
+
+  const cleanUtr = utr.trim().replace(/\s+/g, '');
+  if (!/^\d{10,22}$/.test(cleanUtr)) {
+    res.status(400).json({
+      error: 'Invalid UTR Format',
+      message: 'UPI UTR must be a 12-digit numeric reference from your payment receipt.',
+    });
+    return;
+  }
+
+  const order = db.getOrderByRef(orderRef);
+  if (!order) {
+    res.status(404).json({
+      error: 'Not Found',
+      message: `Order #${orderRef} was not found.`,
+    });
+    return;
+  }
+
+  const cafe = db.getCafeById(order.cafeId);
+  const updated = db.updateOrderPayment(order.id, {
+    utr: cleanUtr,
+    paymentStatus: order.paymentStatus === 'PAID' ? 'PAID' : 'PROCESSING',
+    source: 'CUSTOMER_SUBMITTED',
+    reason: `Customer submitted UPI UTR: ${cleanUtr}`,
+  }) || order;
+
+  // Dispatch Pending Verification notification (PRD Section 10)
+  notificationService
+    .sendPendingVerificationNotification(updated, cafe?.name || 'MenuMint Café')
+    .catch(() => {});
+
+  res.json({
+    success: true,
+    message: 'UPI UTR submitted successfully. Verification in progress.',
+    orderRef: order.orderRef,
+    utr: cleanUtr,
+    paymentStatus: updated.paymentStatus,
+  });
+});
+
+// 4f. Notification Audit Checkpoints (PRD Checkpoint 8 verification)
+publicRouter.get('/notifications/audit', (_req: Request, res: Response): void => {
+  const logs = db.getRecentNotifications(50);
+  res.json({
+    success: true,
+    count: logs.length,
+    smsConfigured: Boolean(process.env.SMS_API_KEY || process.env.FAST2SMS_KEY),
+    emailConfigured: Boolean(process.env.SMTP_HOST),
+    notifications: logs,
+  });
+});
+
+publicRouter.get('/orders/:orderRef/notifications', (req: Request, res: Response): void => {
+  const { orderRef } = req.params;
+  const logs = db.getNotificationsByOrderRef(orderRef);
+  res.json({
+    success: true,
+    orderRef,
+    notifications: logs,
   });
 });
 

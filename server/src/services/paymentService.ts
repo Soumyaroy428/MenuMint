@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { Order, Cafe, PaymentSession, PaymentStatus } from '../types.js';
 import { PaymentConfigValidator } from '../config/paymentConfig.js';
 import { db } from '../db.js';
+import { notificationService } from './notificationService.js';
 
 export interface YoupiWebhookEvent {
   event: 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'EXPIRED' | 'payment.success' | 'payment.failed';
@@ -35,10 +36,32 @@ export class YoupiPaymentService {
     const amountMajor = (amountPaise / 100).toFixed(2);
     const currency = 'INR';
 
-    // Construct standardized UPI Intent URI according to NPCI / Indian UPI specification
-    const qrPayload = config.upiId
-      ? `upi://pay?pa=${encodeURIComponent(config.upiId)}&pn=${encodeURIComponent(config.payeeName)}&am=${amountMajor}&cu=${currency}&tr=${order.orderRef}&tn=${encodeURIComponent('MenuMint ' + order.orderRef)}`
-      : '';
+    const cleanUpiId = (config.upiId || '').trim();
+    const cleanPayeeName = (config.payeeName || 'MenuMint Merchant').trim();
+    const cleanNote = `Order ${order.orderRef}`.trim();
+
+    // Standard NPCI UPI URI Specification:
+    // 1. pa MUST NOT be percent-encoded (%40) because mobile UPI apps validate raw VPA syntax.
+    // 2. tr is strictly omitted for personal/P2P VPAs (like @jio, @okhdfcbank, @paytm)
+    //    because beneficiary banks reject tr on personal accounts with "Transaction Failure" (code ZM/U16).
+    const isPersonalVpa = cleanUpiId.endsWith('@jio') ||
+                          cleanUpiId.endsWith('@okhdfcbank') ||
+                          cleanUpiId.endsWith('@oksbi') ||
+                          cleanUpiId.endsWith('@okaxis') ||
+                          cleanUpiId.endsWith('@okicici') ||
+                          cleanUpiId.endsWith('@paytm') ||
+                          cleanUpiId.endsWith('@ybl') ||
+                          cleanUpiId.endsWith('@ibl') ||
+                          cleanUpiId.endsWith('@axl');
+
+    let qrPayload = '';
+    if (cleanUpiId) {
+      if (isPersonalVpa) {
+        qrPayload = `upi://pay?pa=${cleanUpiId}&pn=${encodeURIComponent(cleanPayeeName)}&am=${amountMajor}&cu=INR&tn=${encodeURIComponent(cleanNote)}`;
+      } else {
+        qrPayload = `upi://pay?pa=${cleanUpiId}&pn=${encodeURIComponent(cleanPayeeName)}&am=${amountMajor}&cu=INR&tr=${order.orderRef}&tn=${encodeURIComponent(cleanNote)}`;
+      }
+    }
 
     const returnUrl = `${config.appUrl}/?order=${order.orderRef}&payment=complete`;
 
@@ -220,6 +243,19 @@ export class YoupiPaymentService {
     // Record delivery idempotency
     if (deliveryId) {
       db.recordWebhookDelivery(deliveryId, order.orderRef);
+    }
+
+    // Trigger customer SMS / Email notifications (PRD Checkpoint 8)
+    const cafe = db.getCafeById(order.cafeId);
+    const cafeName = cafe?.name || 'MenuMint Café';
+    if (targetStatus === 'PAID') {
+      notificationService.sendPaymentSuccessNotification(order, cafeName).catch((err) => {
+        console.error('[Notification] Error dispatching payment success notice:', err);
+      });
+    } else if (targetStatus === 'FAILED') {
+      notificationService.sendPaymentFailedNotification(order, cafeName).catch((err) => {
+        console.error('[Notification] Error dispatching payment failure notice:', err);
+      });
     }
 
     return {

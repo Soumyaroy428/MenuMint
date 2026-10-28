@@ -12,7 +12,7 @@ export interface PaymentAuditEntry {
   fromStatus: PaymentStatus;
   toStatus: PaymentStatus;
   reason?: string;
-  source: 'WEBHOOK' | 'STATUS_POLL' | 'COUNTER_STAFF' | 'SESSION_CREATION' | 'SIMULATION';
+  source: 'WEBHOOK' | 'STATUS_POLL' | 'COUNTER_STAFF' | 'SESSION_CREATION' | 'SIMULATION' | 'CUSTOMER_SUBMITTED';
   timestamp: string;
   deliveryId?: string;
   utr?: string;
@@ -168,6 +168,7 @@ export interface Order {
   orderType: OrderType;
   customerName: string;
   customerPhone?: string;
+  customerEmail?: string;
   tableNumber?: string;
   notes?: string;
   items: OrderItemSnapshot[];
@@ -304,6 +305,29 @@ export interface AccountingReport {
     paymentStatus?: PaymentStatus;
     paymentMethod?: PaymentMethod;
   }[];
+}
+
+export type NotificationChannel = 'SMS' | 'EMAIL';
+export type NotificationType =
+  | 'ORDER_CONFIRMED'
+  | 'PAYMENT_SUCCESS'
+  | 'PENDING_VERIFICATION'
+  | 'PAYMENT_FAILED';
+export type NotificationDeliveryStatus = 'DELIVERED' | 'QUEUED_LOGGED' | 'FAILED';
+
+export interface NotificationLog {
+  id: string;
+  orderRef: string;
+  channel: NotificationChannel;
+  type: NotificationType;
+  recipient: string;
+  subject?: string;
+  body: string;
+  status: NotificationDeliveryStatus;
+  provider: string;
+  idempotencyKey: string;
+  timestamp: string;
+  error?: string;
 }
 
 

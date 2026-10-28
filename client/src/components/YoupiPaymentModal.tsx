@@ -35,6 +35,10 @@ export const YoupiPaymentModal: React.FC<YoupiPaymentModalProps> = ({
   >('PENDING');
   const [copiedUpi, setCopiedUpi] = useState<boolean>(false);
   const [qrImageError, setQrImageError] = useState<boolean>(false);
+  const [utrInput, setUtrInput] = useState<string>('');
+  const [isSubmittingUtr, setIsSubmittingUtr] = useState<boolean>(false);
+  const [utrMessage, setUtrMessage] = useState<string | null>(null);
+  const [showUtrBox, setShowUtrBox] = useState<boolean>(false);
   const pollTimerRef = useRef<number | null>(null);
 
   // Sync state when order changes
@@ -104,12 +108,37 @@ export const YoupiPaymentModal: React.FC<YoupiPaymentModalProps> = ({
 
   const totalFormatted = (order.total / 100).toFixed(2);
 
-  // Standardized NPCI UPI URI with strict Indian Rupee (INR) currency formatting
-  const qrData = upiId
-    ? (order.qrPayload && order.qrPayload.includes(`pa=${encodeURIComponent(upiId)}`)
-        ? order.qrPayload
-        : `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(payeeName)}&am=${totalFormatted}&cu=INR&tr=${order.orderRef}&tn=${encodeURIComponent('MenuMint ' + order.orderRef)}`)
+  // Check if personal VPA (like @jio, @okhdfcbank, @paytm) where beneficiary bank strictly rejects 'tr=' parameter
+  const isPersonalVpa =
+    upiId.endsWith('@jio') ||
+    upiId.endsWith('@okhdfcbank') ||
+    upiId.endsWith('@oksbi') ||
+    upiId.endsWith('@okaxis') ||
+    upiId.endsWith('@okicici') ||
+    upiId.endsWith('@paytm') ||
+    upiId.endsWith('@ybl') ||
+    upiId.endsWith('@ibl') ||
+    upiId.endsWith('@axl');
+
+  const cleanNote = `Order ${order.orderRef}`.trim();
+  const encodedPayee = encodeURIComponent(payeeName);
+  const encodedNote = encodeURIComponent(cleanNote);
+
+  // Standard NPCI UPI URI:
+  // 1. pa MUST NOT be percent-encoded (%40) because mobile UPI apps validate raw VPA syntax.
+  // 2. tr is strictly omitted for personal/P2P VPAs (like @jio) to avoid beneficiary bank rejection (ZM/U16).
+  const cleanUpiUri = upiId
+    ? (isPersonalVpa
+        ? `upi://pay?pa=${upiId}&pn=${encodedPayee}&am=${totalFormatted}&cu=INR&tn=${encodedNote}`
+        : `upi://pay?pa=${upiId}&pn=${encodedPayee}&am=${totalFormatted}&cu=INR&tr=${order.orderRef}&tn=${encodedNote}`)
     : '';
+
+  const qrData = cleanUpiUri;
+
+  // App-specific Android intents (package-targeted intents prevent browser scheme blocking and app chooser failure)
+  const phonepeIntent = `intent://pay?pa=${upiId}&pn=${encodedPayee}&am=${totalFormatted}&cu=INR&tn=${encodedNote}#Intent;scheme=upi;package=com.phonepe.app;end`;
+  const gpayIntent = `intent://pay?pa=${upiId}&pn=${encodedPayee}&am=${totalFormatted}&cu=INR&tn=${encodedNote}#Intent;scheme=upi;package=com.google.android.apps.nbu.paisa.user;end`;
+  const paytmIntent = `intent://pay?pa=${upiId}&pn=${encodedPayee}&am=${totalFormatted}&cu=INR&tn=${encodedNote}#Intent;scheme=upi;package=net.one97.paytm;end`;
 
   // Dual-CDN high-reliability QR Code image
   const qrImageUrl = qrImageError
@@ -121,6 +150,36 @@ export const YoupiPaymentModal: React.FC<YoupiPaymentModalProps> = ({
     navigator.clipboard.writeText(upiId);
     setCopiedUpi(true);
     setTimeout(() => setCopiedUpi(false), 2000);
+  };
+
+  const handleSubmitUtr = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!utrInput.trim()) return;
+    const clean = utrInput.trim().replace(/\s+/g, '');
+    if (!/^\d{10,22}$/.test(clean)) {
+      setUtrMessage('Please enter a valid 12-digit UPI UTR number from your payment app.');
+      return;
+    }
+    setIsSubmittingUtr(true);
+    setUtrMessage(null);
+    try {
+      const res = await fetch(`/api/orders/${order.orderRef}/submit-utr`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ utr: clean }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPaymentStatus('PROCESSING');
+        setUtrMessage('✓ UTR submitted! Verifying bank settlement credit alert...');
+      } else {
+        setUtrMessage(data.message || 'Failed to submit UTR. Please try again.');
+      }
+    } catch {
+      setUtrMessage('Network error. Status is still polling in the background.');
+    } finally {
+      setIsSubmittingUtr(false);
+    }
   };
 
   const handleSwitchToCounter = () => {
@@ -429,26 +488,190 @@ export const YoupiPaymentModal: React.FC<YoupiPaymentModalProps> = ({
                 </button>
               )}
 
-              {/* Direct UPI Intent (for mobile devices: GPay, PhonePe, Paytm, CRED, BHIM) */}
+              {/* Mobile UPI Direct App Links (Package-targeted intents prevent bank declines) */}
               {upiId && qrData && (
-                <a
-                  href={qrData}
-                  className="btn btn-primary"
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Pay with Installed UPI App:
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem' }}>
+                    {/* PhonePe */}
+                    <a
+                      href={phonepeIntent}
+                      className="btn"
+                      style={{
+                        background: '#5f259f',
+                        color: '#ffffff',
+                        justifyContent: 'center',
+                        gap: 6,
+                        padding: '0.65rem 0.5rem',
+                        fontSize: '0.85rem',
+                        fontWeight: 700,
+                        textDecoration: 'none',
+                        borderRadius: 8,
+                      }}
+                    >
+                      <Smartphone size={16} />
+                      <span>PhonePe</span>
+                    </a>
+
+                    {/* Google Pay */}
+                    <a
+                      href={gpayIntent}
+                      className="btn"
+                      style={{
+                        background: '#1a73e8',
+                        color: '#ffffff',
+                        justifyContent: 'center',
+                        gap: 6,
+                        padding: '0.65rem 0.5rem',
+                        fontSize: '0.85rem',
+                        fontWeight: 700,
+                        textDecoration: 'none',
+                        borderRadius: 8,
+                      }}
+                    >
+                      <Smartphone size={16} />
+                      <span>Google Pay</span>
+                    </a>
+
+                    {/* Paytm */}
+                    <a
+                      href={paytmIntent}
+                      className="btn"
+                      style={{
+                        background: '#002e6e',
+                        color: '#ffffff',
+                        justifyContent: 'center',
+                        gap: 6,
+                        padding: '0.65rem 0.5rem',
+                        fontSize: '0.85rem',
+                        fontWeight: 700,
+                        textDecoration: 'none',
+                        borderRadius: 8,
+                      }}
+                    >
+                      <Smartphone size={16} />
+                      <span>Paytm</span>
+                    </a>
+
+                    {/* Universal / Other Apps */}
+                    <a
+                      href={qrData}
+                      className="btn"
+                      style={{
+                        background: '#059669',
+                        color: '#ffffff',
+                        justifyContent: 'center',
+                        gap: 6,
+                        padding: '0.65rem 0.5rem',
+                        fontSize: '0.85rem',
+                        fontWeight: 700,
+                        textDecoration: 'none',
+                        borderRadius: 8,
+                      }}
+                    >
+                      <Smartphone size={16} />
+                      <span>Any UPI App</span>
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {/* Manual UPI UTR Submission (PRD Checkpoint 4 & 7) */}
+              {upiId && (
+                <div
                   style={{
-                    width: '100%',
-                    justifyContent: 'center',
-                    gap: 8,
-                    padding: '0.75rem',
-                    fontSize: '0.92rem',
-                    fontWeight: 700,
-                    textDecoration: 'none',
-                    background: '#059669',
+                    marginTop: '0.25rem',
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
                     borderRadius: 8,
+                    padding: '0.65rem 0.85rem',
                   }}
                 >
-                  <Smartphone size={18} />
-                  <span>Pay via UPI App (PhonePe / GPay / Paytm)</span>
-                </a>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => setShowUtrBox(!showUtrBox)}
+                  >
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155' }}>
+                      Already paid in app? Enter UPI Ref / UTR
+                    </span>
+                    <span style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 700 }}>
+                      {showUtrBox ? '▲ Hide' : '▼ Enter'}
+                    </span>
+                  </div>
+
+                  {showUtrBox && (
+                    <form onSubmit={handleSubmitUtr} style={{ marginTop: '0.6rem' }}>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <input
+                          type="text"
+                          placeholder="e.g. 428912345678 (12-digit UTR)"
+                          value={utrInput}
+                          onChange={(e) => setUtrInput(e.target.value)}
+                          maxLength={22}
+                          style={{
+                            flex: 1,
+                            padding: '0.45rem 0.6rem',
+                            border: '1px solid #cbd5e1',
+                            borderRadius: 6,
+                            fontSize: '0.82rem',
+                          }}
+                        />
+                        <button
+                          type="submit"
+                          disabled={isSubmittingUtr || !utrInput.trim()}
+                          className="btn btn-primary"
+                          style={{
+                            padding: '0.45rem 0.75rem',
+                            fontSize: '0.8rem',
+                            background: '#059669',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {isSubmittingUtr ? 'Verifying...' : 'Verify UTR'}
+                        </button>
+                      </div>
+                      {utrMessage && (
+                        <div
+                          style={{
+                            marginTop: '0.4rem',
+                            fontSize: '0.75rem',
+                            color: utrMessage.startsWith('✓') ? '#166534' : '#dc2626',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {utrMessage}
+                        </div>
+                      )}
+                    </form>
+                  )}
+                </div>
+              )}
+
+              {/* Notification Status Pill (PRD Checkpoint 8) */}
+              {order.customerPhone && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: '0.72rem',
+                    color: '#64748b',
+                    background: '#f1f5f9',
+                    borderRadius: 6,
+                    padding: '0.35rem 0.6rem',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <span>📱 SMS receipt will be dispatched to {order.customerPhone}</span>
+                </div>
               )}
 
               {/* External checkout link if hosted */}
